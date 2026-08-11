@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  bookmarks    Bookmark[]
+  progress     ReadingProgress?
+  goals        Goal[]
+  sessions     RecitationSession[]
+}
+
+model Surah {
+  id          Int      @id
+  number      Int      @unique
+  name        String
+  arabicName  String
+  ayahCount   Int
+  ayahs       Ayah[]
+}
+
+model Ayah {
+  id          Int      @id
+  surahId     Int
+  number      Int
+  textArabic  String
+  translation String?
+  audioUrl    String?
+  surah       Surah   @relation(fields: [surahId], references: [id], onDelete: Cascade)
+  bookmarks   Bookmark[]
+
+  @@unique([surahId, number])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  ayahId    Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ayah      Ayah     @relation(fields: [ayahId], references: [id], onDelete: Cascade)
+  @@unique([userId, ayahId])
+}
+
+model ReadingProgress {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  surahNumber   Int
+  ayahNumber    Int
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Goal {
+  id         String   @id @default(cuid())
+  userId     String
+  type       GoalType
+  target     Int
+  completed  Int      @default(0)
+  date       DateTime
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, date])
+}
+
+model RecitationSession {
+  id             String   @id @default(cuid())
+  userId         String
+  surahNumber    Int?
+  startedAt      DateTime @default(now())
+  durationSec    Int      @default(0)
+  accuracy       Float?
+  mistakes       Int      @default(0)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum GoalType {
+  MEMORIZE
+  REVIEW
+  RECITE
+}
