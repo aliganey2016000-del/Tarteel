@@ -1,0 +1,14 @@
+{
+  "name": "tarteel-quran-learning-app",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
+    "build": "npm --prefix client run build",
+    "client:install": "npm --prefix client install",
+    "server:install": "npm --prefix server install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
