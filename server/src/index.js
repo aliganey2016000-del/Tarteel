@@ -113,6 +113,85 @@ app.get('/api/surahs', async (_req, res) => {
   }
 })
 
+app.get('/api/bookmarks', requireAuth, async (req, res) => {
+  try {
+    const data = await prisma.bookmark.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        createdAt: true,
+        ayah: { select: { id: true, number: true, textArabic: true, translation: true, surah: { select: { number: true, name: true, arabicName: true } } } }
+      }
+    })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Bookmarks are temporarily unavailable' })
+  }
+})
+
+app.put('/api/bookmarks/:ayahId', requireAuth, async (req, res) => {
+  const ayahId = Number(req.params.ayahId)
+  if (!Number.isInteger(ayahId) || ayahId < 1) return res.status(400).json({ error: 'A valid ayahId is required' })
+  try {
+    const bookmark = await prisma.bookmark.upsert({
+      where: { userId_ayahId: { userId: req.user.id, ayahId } },
+      create: { userId: req.user.id, ayahId },
+      update: {},
+      select: { id: true, createdAt: true, ayahId: true }
+    })
+    res.status(201).json({ data: bookmark })
+  } catch (error) {
+    if (error?.code === 'P2003') return res.status(404).json({ error: 'Ayah not found' })
+    console.error(error)
+    res.status(500).json({ error: 'Unable to save bookmark' })
+  }
+})
+
+app.delete('/api/bookmarks/:ayahId', requireAuth, async (req, res) => {
+  const ayahId = Number(req.params.ayahId)
+  if (!Number.isInteger(ayahId) || ayahId < 1) return res.status(400).json({ error: 'A valid ayahId is required' })
+  try {
+    await prisma.bookmark.deleteMany({ where: { userId: req.user.id, ayahId } })
+    res.status(204).end()
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Unable to remove bookmark' })
+  }
+})
+
+app.get('/api/progress', requireAuth, async (req, res) => {
+  try {
+    const data = await prisma.readingProgress.findUnique({ where: { userId: req.user.id } })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Reading progress is temporarily unavailable' })
+  }
+})
+
+app.put('/api/progress', requireAuth, async (req, res) => {
+  const surahNumber = Number(req.body?.surahNumber)
+  const ayahNumber = Number(req.body?.ayahNumber)
+  if (!Number.isInteger(surahNumber) || surahNumber < 1 || surahNumber > 114 || !Number.isInteger(ayahNumber) || ayahNumber < 1) {
+    return res.status(400).json({ error: 'Valid surahNumber and ayahNumber are required' })
+  }
+  try {
+    const surah = await prisma.surah.findUnique({ where: { number: surahNumber }, select: { ayahCount: true } })
+    if (!surah || ayahNumber > surah.ayahCount) return res.status(400).json({ error: 'Ayah is outside the selected Surah' })
+    const data = await prisma.readingProgress.upsert({
+      where: { userId: req.user.id },
+      create: { userId: req.user.id, surahNumber, ayahNumber },
+      update: { surahNumber, ayahNumber },
+    })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Unable to save reading progress' })
+  }
+})
+
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }))
 
 const shutdown = async () => { await prisma.$disconnect(); process.exit(0) }
