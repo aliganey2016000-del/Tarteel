@@ -59,6 +59,13 @@ const requireAuth = async (req, res, next) => {
   next()
 }
 
+const startOfDay = (value = new Date()) => {
+  const date = new Date(value)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+const validGoalType = (value) => ['MEMORIZE', 'REVIEW', 'RECITE'].includes(value)
+
 app.get('/api/health', async (_req, res) => {
   let database = 'unknown'
   try { await prisma.$queryRaw`SELECT 1`; database = 'ok' } catch { database = 'unavailable' }
@@ -115,15 +122,7 @@ app.get('/api/surahs', async (_req, res) => {
 
 app.get('/api/bookmarks', requireAuth, async (req, res) => {
   try {
-    const data = await prisma.bookmark.findMany({
-      where: { userId: req.user.id },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        createdAt: true,
-        ayah: { select: { id: true, number: true, textArabic: true, translation: true, surah: { select: { number: true, name: true, arabicName: true } } } }
-      }
-    })
+    const data = await prisma.bookmark.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, select: { id: true, createdAt: true, ayah: { select: { id: true, number: true, textArabic: true, translation: true, surah: { select: { number: true, name: true, arabicName: true } } } } } })
     res.json({ data })
   } catch (error) {
     console.error(error)
@@ -135,12 +134,7 @@ app.put('/api/bookmarks/:ayahId', requireAuth, async (req, res) => {
   const ayahId = Number(req.params.ayahId)
   if (!Number.isInteger(ayahId) || ayahId < 1) return res.status(400).json({ error: 'A valid ayahId is required' })
   try {
-    const bookmark = await prisma.bookmark.upsert({
-      where: { userId_ayahId: { userId: req.user.id, ayahId } },
-      create: { userId: req.user.id, ayahId },
-      update: {},
-      select: { id: true, createdAt: true, ayahId: true }
-    })
+    const bookmark = await prisma.bookmark.upsert({ where: { userId_ayahId: { userId: req.user.id, ayahId } }, create: { userId: req.user.id, ayahId }, update: {}, select: { id: true, createdAt: true, ayahId: true } })
     res.status(201).json({ data: bookmark })
   } catch (error) {
     if (error?.code === 'P2003') return res.status(404).json({ error: 'Ayah not found' })
@@ -174,21 +168,69 @@ app.get('/api/progress', requireAuth, async (req, res) => {
 app.put('/api/progress', requireAuth, async (req, res) => {
   const surahNumber = Number(req.body?.surahNumber)
   const ayahNumber = Number(req.body?.ayahNumber)
-  if (!Number.isInteger(surahNumber) || surahNumber < 1 || surahNumber > 114 || !Number.isInteger(ayahNumber) || ayahNumber < 1) {
-    return res.status(400).json({ error: 'Valid surahNumber and ayahNumber are required' })
-  }
+  if (!Number.isInteger(surahNumber) || surahNumber < 1 || surahNumber > 114 || !Number.isInteger(ayahNumber) || ayahNumber < 1) return res.status(400).json({ error: 'Valid surahNumber and ayahNumber are required' })
   try {
     const surah = await prisma.surah.findUnique({ where: { number: surahNumber }, select: { ayahCount: true } })
     if (!surah || ayahNumber > surah.ayahCount) return res.status(400).json({ error: 'Ayah is outside the selected Surah' })
-    const data = await prisma.readingProgress.upsert({
-      where: { userId: req.user.id },
-      create: { userId: req.user.id, surahNumber, ayahNumber },
-      update: { surahNumber, ayahNumber },
-    })
+    const data = await prisma.readingProgress.upsert({ where: { userId: req.user.id }, create: { userId: req.user.id, surahNumber, ayahNumber }, update: { surahNumber, ayahNumber } })
     res.json({ data })
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Unable to save reading progress' })
+  }
+})
+
+app.get('/api/goals', requireAuth, async (req, res) => {
+  const requestedDate = req.query?.date ? new Date(String(req.query.date)) : new Date()
+  if (Number.isNaN(requestedDate.getTime())) return res.status(400).json({ error: 'Invalid date' })
+  const day = startOfDay(requestedDate)
+  const nextDay = new Date(day); nextDay.setDate(nextDay.getDate() + 1)
+  try {
+    const data = await prisma.goal.findMany({ where: { userId: req.user.id, date: { gte: day, lt: nextDay } }, orderBy: { type: 'asc' } })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Goals are temporarily unavailable' })
+  }
+})
+
+app.put('/api/goals/:type', requireAuth, async (req, res) => {
+  const type = String(req.params.type || '').toUpperCase()
+  const target = Number(req.body?.target)
+  const completed = req.body?.completed === undefined ? 0 : Number(req.body.completed)
+  const requestedDate = req.body?.date ? new Date(String(req.body.date)) : new Date()
+  if (!validGoalType(type)) return res.status(400).json({ error: 'Goal type must be MEMORIZE, REVIEW, or RECITE' })
+  if (!Number.isInteger(target) || target < 1 || target > 100000) return res.status(400).json({ error: 'Target must be a positive integer' })
+  if (!Number.isInteger(completed) || completed < 0 || completed > target) return res.status(400).json({ error: 'Completed must be between 0 and target' })
+  if (Number.isNaN(requestedDate.getTime())) return res.status(400).json({ error: 'Invalid date' })
+  const day = startOfDay(requestedDate)
+  try {
+    const existing = await prisma.goal.findFirst({ where: { userId: req.user.id, type, date: day } })
+    const data = existing
+      ? await prisma.goal.update({ where: { id: existing.id }, data: { target, completed } })
+      : await prisma.goal.create({ data: { userId: req.user.id, type, target, completed, date: day } })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Unable to save goal' })
+  }
+})
+
+app.patch('/api/goals/:type/progress', requireAuth, async (req, res) => {
+  const type = String(req.params.type || '').toUpperCase()
+  const increment = Number(req.body?.increment ?? 1)
+  if (!validGoalType(type)) return res.status(400).json({ error: 'Goal type must be MEMORIZE, REVIEW, or RECITE' })
+  if (!Number.isInteger(increment) || increment < 1 || increment > 10000) return res.status(400).json({ error: 'Increment must be a positive integer' })
+  const day = startOfDay()
+  try {
+    const existing = await prisma.goal.findFirst({ where: { userId: req.user.id, type, date: day } })
+    if (!existing) return res.status(404).json({ error: 'Create today’s goal before recording progress' })
+    const completed = Math.min(existing.target, existing.completed + increment)
+    const data = await prisma.goal.update({ where: { id: existing.id }, data: { completed } })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Unable to update goal progress' })
   }
 })
 
