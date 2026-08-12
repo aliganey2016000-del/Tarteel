@@ -6,6 +6,7 @@ import morgan from 'morgan'
 import crypto from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
 import { buildStreakSummary, utcDay } from './streaks.js'
+import { DEFAULT_GOAL_TARGETS, clampGoalProgress, normalizeGoalType } from './goals.js'
 
 const app = express()
 const prisma = new PrismaClient()
@@ -265,6 +266,15 @@ app.get('/api/goals', requireAuth, async (req, res) => {
   const day = startOfDay(requestedDate)
   const nextDay = new Date(day); nextDay.setDate(nextDay.getDate() + 1)
   try {
+    const existing = await prisma.goal.findMany({ where: { userId: req.user.id, date: { gte: day, lt: nextDay } }, orderBy: { type: 'asc' } })
+    const existingTypes = new Set(existing.map(goal => goal.type))
+    const missing = Object.entries(DEFAULT_GOAL_TARGETS).filter(([type]) => !existingTypes.has(type))
+    if (missing.length) {
+      await prisma.goal.createMany({
+        data: missing.map(([type, target]) => ({ userId: req.user.id, type, target, completed: 0, date: day })),
+        skipDuplicates: true
+      })
+    }
     const data = await prisma.goal.findMany({ where: { userId: req.user.id, date: { gte: day, lt: nextDay } }, orderBy: { type: 'asc' } })
     res.json({ data })
   } catch (error) {
@@ -274,7 +284,7 @@ app.get('/api/goals', requireAuth, async (req, res) => {
 })
 
 app.put('/api/goals/:type', requireAuth, async (req, res) => {
-  const type = String(req.params.type || '').toUpperCase()
+  const type = normalizeGoalType(req.params.type)
   const target = Number(req.body?.target)
   const completed = req.body?.completed === undefined ? 0 : Number(req.body.completed)
   const requestedDate = req.body?.date ? new Date(String(req.body.date)) : new Date()
@@ -296,15 +306,17 @@ app.put('/api/goals/:type', requireAuth, async (req, res) => {
 })
 
 app.patch('/api/goals/:type/progress', requireAuth, async (req, res) => {
-  const type = String(req.params.type || '').toUpperCase()
+  const type = normalizeGoalType(req.params.type)
   const increment = Number(req.body?.increment ?? 1)
   if (!validGoalType(type)) return res.status(400).json({ error: 'Goal type must be MEMORIZE, REVIEW, or RECITE' })
   if (!Number.isInteger(increment) || increment < 1 || increment > 10000) return res.status(400).json({ error: 'Increment must be a positive integer' })
   const day = startOfDay()
   try {
-    const existing = await prisma.goal.findFirst({ where: { userId: req.user.id, type, date: day } })
-    if (!existing) return res.status(404).json({ error: 'Create today’s goal before recording progress' })
-    const completed = Math.min(existing.target, existing.completed + increment)
+    let existing = await prisma.goal.findFirst({ where: { userId: req.user.id, type, date: day } })
+    if (!existing) {
+      existing = await prisma.goal.create({ data: { userId: req.user.id, type, target: DEFAULT_GOAL_TARGETS[type], completed: 0, date: day } })
+    }
+    const completed = clampGoalProgress(existing.completed, existing.target, increment)
     const data = await prisma.goal.update({ where: { id: existing.id }, data: { completed } })
     await recordActivity(req.user.id)
     res.json({ data })
