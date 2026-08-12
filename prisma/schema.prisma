@@ -19,6 +19,7 @@ model User {
   progress     ReadingProgress?
   goals        Goal[]
   sessions     RecitationSession[]
+  activityDays ActivityDay[]
 }
 
 model Surah {
@@ -83,6 +84,17 @@ model RecitationSession {
   accuracy       Float?
   mistakes       Int      @default(0)
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityDay {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
 }
 
 enum GoalType {
