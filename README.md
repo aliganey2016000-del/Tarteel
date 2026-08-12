@@ -33,6 +33,7 @@ A modern, mobile-first Quran learning platform focused on reading, recitation, m
 - Daily goals and recitation session APIs
 - Role-based admin foundation with protected operational statistics and user listing
 - Helmet, CORS, JSON-size limits, and graceful Prisma shutdown
+- Frontend authentication API boundary with persistent bearer-token lifecycle helpers
 
 ## Authentication configuration
 
@@ -45,6 +46,8 @@ Authentication endpoints:
 - `POST /api/auth/register` — create an account
 - `POST /api/auth/login` — authenticate and receive a signed token
 - `GET /api/auth/me` — retrieve the authenticated user with `Authorization: Bearer <token>`
+
+The React client exposes these through `client/src/authApi.js`, including safe token lifecycle helpers and account operations. The UI can consume this boundary without duplicating authentication request logic. Tokens are stored under the `tarteel_token` key to remain compatible with existing authenticated API calls.
 
 Passwords are hashed with Node.js `scrypt`; plaintext passwords are never stored.
 
