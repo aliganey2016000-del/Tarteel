@@ -10,6 +10,7 @@ const app = express()
 const prisma = new PrismaClient()
 const port = process.env.PORT || 4000
 const tokenSecret = process.env.AUTH_SECRET
+const adminEmails = new Set(String(process.env.ADMIN_EMAILS || '').split(',').map(normalizeEmail).filter(Boolean))
 
 if (!tokenSecret || tokenSecret.length < 32) {
   console.warn('AUTH_SECRET is missing or shorter than 32 characters; authentication routes will reject requests until it is configured.')
@@ -20,7 +21,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }))
 app.use(express.json({ limit: '64kb' }))
 app.use(morgan('dev'))
 
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
+function normalizeEmail(email) { return String(email || '').trim().toLowerCase() }
 const validEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 const passwordHash = async (password, salt = crypto.randomBytes(16).toString('hex')) => {
   const derived = await new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (err, key) => err ? reject(err) : resolve(key.toString('hex'))))
@@ -59,6 +60,19 @@ const requireAuth = async (req, res, next) => {
   next()
 }
 
+const requireAdmin = async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { role: true } })
+    if (!user) return res.status(401).json({ error: 'User account no longer exists' })
+    if (user.role !== 'ADMIN') return res.status(403).json({ error: 'Administrator access required' })
+    req.user.role = user.role
+    next()
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Authorization service is temporarily unavailable' })
+  }
+}
+
 const startOfDay = (value = new Date()) => {
   const date = new Date(value)
   date.setHours(0, 0, 0, 0)
@@ -83,7 +97,8 @@ app.post('/api/auth/register', async (req, res) => {
     if (!tokenSecret || tokenSecret.length < 32) return res.status(503).json({ error: 'Authentication is not configured' })
     const existing = await prisma.user.findUnique({ where: { email } })
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' })
-    const user = await prisma.user.create({ data: { email, name, passwordHash: await passwordHash(password) }, select: { id: true, email: true, name: true } })
+    const role = adminEmails.has(email) ? 'ADMIN' : 'USER'
+    const user = await prisma.user.create({ data: { email, name, passwordHash: await passwordHash(password), role }, select: { id: true, email: true, name: true, role: true } })
     res.status(201).json({ data: { user, token: signToken(user.id) } })
   } catch (error) {
     console.error(error)
@@ -99,7 +114,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!tokenSecret || tokenSecret.length < 32) return res.status(503).json({ error: 'Authentication is not configured' })
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' })
-    res.json({ data: { user: { id: user.id, email: user.email, name: user.name }, token: signToken(user.id) } })
+    res.json({ data: { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token: signToken(user.id) } })
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Unable to sign in' })
@@ -107,9 +122,35 @@ app.post('/api/auth/login', async (req, res) => {
 })
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, email: true, name: true, createdAt: true } })
+  const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, email: true, name: true, role: true, createdAt: true } })
   if (!user) return res.status(401).json({ error: 'User account no longer exists' })
   res.json({ data: user })
+})
+
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const [users, bookmarks, goals, recitations] = await prisma.$transaction([
+      prisma.user.count(),
+      prisma.bookmark.count(),
+      prisma.goal.count(),
+      prisma.recitationSession.count()
+    ])
+    res.json({ data: { users, bookmarks, goals, recitations } })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Admin statistics are temporarily unavailable' })
+  }
+})
+
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query?.limit || 50), 1), 100)
+  try {
+    const data = await prisma.user.findMany({ orderBy: { createdAt: 'desc' }, take: limit, select: { id: true, email: true, name: true, role: true, createdAt: true, _count: { select: { bookmarks: true, goals: true, sessions: true } } } })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Admin user list is temporarily unavailable' })
+  }
 })
 
 app.get('/api/surahs', async (_req, res) => {
