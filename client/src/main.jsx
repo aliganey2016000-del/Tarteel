@@ -18,6 +18,13 @@ import './styles.css'
 
 const TOKEN_KEY = 'tarteel:auth-token'
 
+function registerOfflineShell() {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  }, { once: true })
+}
+
 function ProgressBadge() {
   const [summary, setSummary] = useState(null)
   useEffect(() => {
@@ -55,6 +62,8 @@ function Root() {
   if (pathname === '/' || pathname === '') return <><SurahIndex /><ProgressBadge /></>
   return <><AppReaderShell /><ProgressBadge /></>
 }
+
+registerOfflineShell()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
