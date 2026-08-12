@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, Headphones, LogIn, LogOut, Menu, Pause, Play, Search, UserRound, X } from 'lucide-react'
 import { getSurah, listSurahs } from './quranApi'
 import { getMe, listBookmarks, login, register, removeBookmark, saveBookmark, saveProgress } from './accountApi'
+import { clampAyahIndex, filterSurahs, parseAyahNumber, progressPercent } from './readerUtils.js'
 
 const STORAGE_KEY = 'tarteel:reader:v2'
 const TOKEN_KEY = 'tarteel:auth-token'
@@ -22,6 +23,7 @@ function AppReader() {
   const [surah, setSurah] = useState(null)
   const [ayahIndex, setAyahIndex] = useState(Math.max(0, Number(saved.ayahNumber || 1) - 1))
   const [query, setQuery] = useState('')
+  const [ayahInput, setAyahInput] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [user, setUser] = useState(null)
@@ -47,25 +49,30 @@ function AppReader() {
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoadingSurah(true); setError(''); setPlaying(false)
+    stopAudio()
+    setLoadingSurah(true); setError('')
     getSurah(selectedSurah, { signal: controller.signal }).then((data) => {
       setSurah(data)
       const state = readState()
       const savedAyah = selectedSurah === Number(state.surahNumber) ? Number(state.ayahNumber || 1) : 1
-      setAyahIndex(Math.min(Math.max(savedAyah - 1, 0), data.ayahs.length - 1))
+      setAyahIndex(clampAyahIndex(savedAyah - 1, data.ayahs.length))
+      setAyahInput('')
     }).catch((err) => {
       if (err.name !== 'AbortError') setError(`Unable to load this Surah. ${err.message}`)
     }).finally(() => setLoadingSurah(false))
     return () => controller.abort()
   }, [selectedSurah])
 
-  const filtered = useMemo(() => {
-    const value = query.trim().toLowerCase()
-    if (!value) return catalog
-    return catalog.filter((item) => `${item.number} ${item.englishName} ${item.name} ${item.englishNameTranslation}`.toLowerCase().includes(value))
-  }, [catalog, query])
+  useEffect(() => () => {
+    audioRef.current?.pause()
+    audioRef.current = null
+  }, [])
 
+  const filtered = useMemo(() => filterSurahs(catalog, query), [catalog, query])
   const currentAyah = surah?.ayahs?.[ayahIndex]
+  const bookmarks = readState().bookmarks || []
+  const bookmarked = currentAyah ? bookmarks.includes(currentAyah.number) : false
+  const currentBookmarks = useMemo(() => surah?.ayahs?.filter((ayah) => bookmarks.includes(ayah.number)) || [], [surah, bookmarks])
 
   useEffect(() => {
     if (!surah || !currentAyah) return
@@ -74,24 +81,54 @@ function AppReader() {
     if (token) saveProgress(token, surah.number, currentAyah.numberInSurah).catch(() => {})
   }, [surah, currentAyah])
 
-  const stopAudio = () => { audioRef.current?.pause(); setPlaying(false) }
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return
+      if (event.key === 'ArrowLeft') { event.preventDefault(); moveAyah(-1) }
+      if (event.key === 'ArrowRight') { event.preventDefault(); moveAyah(1) }
+      if (event.key === ' ') { event.preventDefault(); toggleAudio() }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.onended = null
+    }
+    setPlaying(false)
+  }
+
   const playAyah = () => {
     if (!currentAyah?.audioUrl) return
     if (!audioRef.current) audioRef.current = new Audio()
     const audio = audioRef.current
     if (audio.src !== currentAyah.audioUrl) audio.src = currentAyah.audioUrl
-    audio.play().then(() => setPlaying(true)).catch(() => setError('Audio could not start. Tap play again or check your connection.'))
     audio.onended = () => {
-      if (ayahIndex < surah.ayahs.length - 1) setAyahIndex((index) => index + 1)
+      if (surah && ayahIndex < surah.ayahs.length - 1) setAyahIndex((index) => index + 1)
       else setPlaying(false)
     }
+    audio.play().then(() => setPlaying(true)).catch(() => setError('Audio could not start. Tap play again or check your connection.'))
   }
+
   const toggleAudio = () => playing ? stopAudio() : playAyah()
   const selectSurah = (number) => { stopAudio(); setSelectedSurah(number); setQuery(''); setMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
-  const moveAyah = (delta) => { if (!surah) return; stopAudio(); setAyahIndex((index) => Math.min(Math.max(index + delta, 0), surah.ayahs.length - 1)) }
+  const moveAyah = (delta) => { if (!surah) return; stopAudio(); setAyahIndex((index) => clampAyahIndex(index + delta, surah.ayahs.length)) }
+  const jumpToAyah = (event) => {
+    event.preventDefault()
+    if (!surah) return
+    const number = parseAyahNumber(ayahInput, surah.ayahs.length)
+    if (!number) {
+      setError(`Enter an ayah number from 1 to ${surah.ayahs.length}.`)
+      return
+    }
+    stopAudio()
+    setAyahIndex(number - 1)
+    setAyahInput('')
+  }
 
-  const bookmarks = readState().bookmarks || []
-  const bookmarked = currentAyah ? bookmarks.includes(currentAyah.number) : false
   const toggleBookmark = async () => {
     if (!currentAyah) return
     const current = new Set(readState().bookmarks || [])
@@ -151,13 +188,14 @@ function AppReader() {
           {loadingSurah ? <div className="space-y-5"><div className="h-20 animate-pulse rounded-2xl bg-slate-100"/><div className="h-72 animate-pulse rounded-2xl bg-slate-100"/><div className="h-10 animate-pulse rounded-xl bg-slate-100"/></div> : surah ? <>
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5"><div><p className="text-sm font-semibold text-emerald-700">Surah {surah.number} · {surah.revelationType}</p><h2 className="mt-1 text-3xl font-bold">{surah.name}</h2><p className="mt-1 text-sm text-slate-500">{surah.ayahCount} ayahs · {surah.translationName}</p></div><div dir="rtl" className="font-arabic text-3xl text-slate-700">{surah.arabicName.replace(/^سُورَةُ\s*/, '')}</div></div>
             <div className="my-7 rounded-2xl bg-[#fbfaf6] p-5 ring-1 ring-[#eee9dc] sm:p-7"><div className="flex items-center justify-between gap-3 text-xs font-semibold text-slate-400"><span>AYAH {currentAyah?.numberInSurah}</span><span>JUZ {currentAyah?.juz}</span></div><p dir="rtl" lang="ar" className="mt-5 font-arabic text-3xl leading-[2.25] text-slate-900 sm:text-4xl">{currentAyah?.textArabic}</p><p className="mt-6 text-sm leading-7 text-slate-600 sm:text-base">{currentAyah?.translation}</p></div>
-            <div className="flex flex-wrap items-center gap-2"><button onClick={() => moveAyah(-1)} disabled={ayahIndex === 0} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft size={16}/> Previous</button><button onClick={toggleAudio} disabled={!currentAyah?.audioUrl} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{playing ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{playing ? 'Pause' : 'Listen'}</button><button onClick={toggleBookmark} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold ${bookmarked ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200'}`}>{bookmarked ? '★ Bookmarked' : '☆ Bookmark'}</button><button onClick={() => moveAyah(1)} disabled={ayahIndex === surah.ayahs.length - 1} className="ml-auto inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">Next <ChevronRight size={16}/></button></div>
-            <div className="mt-7 rounded-2xl border border-slate-100 bg-slate-50 p-4"><div className="flex items-center justify-between text-xs text-slate-500"><span>Reading position</span><span>{ayahIndex + 1} / {surah.ayahs.length}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${((ayahIndex + 1) / surah.ayahs.length) * 100}%` }}/></div></div>
+            <div className="flex flex-wrap items-center gap-2"><button onClick={() => moveAyah(-1)} disabled={ayahIndex === 0} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40" aria-label="Previous ayah"><ChevronLeft size={16}/> Previous</button><button onClick={toggleAudio} disabled={!currentAyah?.audioUrl} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" aria-label={playing ? 'Pause recitation' : 'Play recitation'}>{playing ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{playing ? 'Pause' : 'Listen'}</button><button onClick={toggleBookmark} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold ${bookmarked ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200'}`} aria-pressed={bookmarked}>{bookmarked ? '★ Bookmarked' : '☆ Bookmark'}</button><button onClick={() => moveAyah(1)} disabled={ayahIndex === surah.ayahs.length - 1} className="ml-auto inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40" aria-label="Next ayah">Next <ChevronRight size={16}/></button></div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]"><form onSubmit={jumpToAyah} className="flex items-center gap-2" aria-label="Jump to ayah"><label htmlFor="ayah-jump" className="sr-only">Go to ayah</label><input id="ayah-jump" inputMode="numeric" pattern="[0-9]*" value={ayahInput} onChange={(event) => setAyahInput(event.target.value)} placeholder={`Go to ayah 1–${surah.ayahs.length}`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"/><button className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold">Go</button></form><div className="flex items-center justify-end gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500"><span>Keys: ← → Space</span></div></div>
+            <div className="mt-7 rounded-2xl border border-slate-100 bg-slate-50 p-4"><div className="flex items-center justify-between text-xs text-slate-500"><span>Reading position</span><span>{ayahIndex + 1} / {surah.ayahs.length} · {progressPercent(ayahIndex, surah.ayahs.length)}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent(ayahIndex, surah.ayahs.length)} aria-label="Reading progress"><div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${progressPercent(ayahIndex, surah.ayahs.length)}%` }}/></div></div>
             <div className="mt-6 flex items-center gap-2 text-xs text-slate-400"><Headphones size={14}/> Audio: Mishary Rashid Alafasy · Arabic: Uthmani · Translation: Saheeh International</div>
           </> : <div className="py-20 text-center text-sm text-slate-500">Select a Surah to begin reading.</div>}
         </article>
       </section>
-      <section id="memorize" className="mt-8 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm font-semibold text-emerald-700">Memorization</p><h2 className="mt-1 text-xl font-bold">Use the reader as your review loop.</h2><p className="mt-2 text-sm leading-6 text-slate-500">Move ayah by ayah, replay recitation, and bookmark difficult passages. Account sync keeps your progress available across devices.</p></div><div id="progress" className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm font-semibold text-emerald-700">Continue reading</p><h2 className="mt-1 text-xl font-bold">Surah {readState().surahNumber || DEFAULT_SURAH}, ayah {readState().ayahNumber || 1}</h2><p className="mt-2 text-sm text-slate-500">{user ? `Synced to ${user.email}` : 'Saved on this device. Sign in to sync it.'}</p></div></section>
+      <section className="mt-8 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-emerald-700">Bookmarks</p><h2 className="mt-1 text-xl font-bold">{bookmarks.length} saved ayahs</h2></div><CheckCircle2 className="text-emerald-600" size={22}/></div>{currentBookmarks.length ? <div className="mt-4 flex flex-wrap gap-2">{currentBookmarks.map((ayah) => <button key={ayah.number} onClick={() => { stopAudio(); setAyahIndex(ayah.numberInSurah - 1) }} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Ayah {ayah.numberInSurah}</button>)}</div> : <p className="mt-2 text-sm leading-6 text-slate-500">Save an ayah and it will appear here for quick review in this Surah.</p>}</div><div id="memorize" className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm font-semibold text-emerald-700">Memorization</p><h2 className="mt-1 text-xl font-bold">Use the reader as your review loop.</h2><p className="mt-2 text-sm leading-6 text-slate-500">Move ayah by ayah, replay recitation, and bookmark difficult passages. Account sync keeps your progress available across devices.</p></div><div id="progress" className="rounded-2xl border border-slate-200 bg-white p-5 md:col-span-2"><p className="text-sm font-semibold text-emerald-700">Continue reading</p><h2 className="mt-1 text-xl font-bold">Surah {readState().surahNumber || DEFAULT_SURAH}, ayah {readState().ayahNumber || 1}</h2><p className="mt-2 text-sm text-slate-500">{user ? `Synced to ${user.email}` : 'Saved on this device. Sign in to sync it.'}</p></div></section>
     </main>
     <footer className="border-t border-slate-200 bg-white"><div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-7 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6"><span>© 2026 Tarteel Quran Learning</span><span>Source: Al Quran Cloud · Uthmani · Saheeh International · Alafasy</span></div></footer>
   </div>
