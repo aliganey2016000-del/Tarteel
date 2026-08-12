@@ -5,6 +5,7 @@ import helmet from 'helmet'
 import morgan from 'morgan'
 import crypto from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
+import { buildStreakSummary, utcDay } from './streaks.js'
 
 const app = express()
 const prisma = new PrismaClient()
@@ -78,6 +79,15 @@ const startOfDay = (value = new Date()) => {
   date.setHours(0, 0, 0, 0)
   return date
 }
+const recordActivity = async (userId) => {
+  const date = utcDay()
+  return prisma.activityDay.upsert({
+    where: { userId_date: { userId, date } },
+    create: { userId, date },
+    update: {}
+  })
+}
+
 const validGoalType = (value) => ['MEMORIZE', 'REVIEW', 'RECITE'].includes(value)
 const validSurahNumber = (value) => Number.isInteger(value) && value >= 1 && value <= 114
 
@@ -215,10 +225,37 @@ app.put('/api/progress', requireAuth, async (req, res) => {
     const surah = await prisma.surah.findUnique({ where: { number: surahNumber }, select: { ayahCount: true } })
     if (!surah || ayahNumber > surah.ayahCount) return res.status(400).json({ error: 'Ayah is outside the selected Surah' })
     const data = await prisma.readingProgress.upsert({ where: { userId: req.user.id }, create: { userId: req.user.id, surahNumber, ayahNumber }, update: { surahNumber, ayahNumber } })
+    await recordActivity(req.user.id)
     res.json({ data })
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Unable to save reading progress' })
+  }
+})
+
+app.post('/api/activity', requireAuth, async (req, res) => {
+  try {
+    const activity = await recordActivity(req.user.id)
+    res.status(201).json({ data: { id: activity.id, date: activity.date } })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Activity tracking is temporarily unavailable' })
+  }
+})
+
+app.get('/api/streaks', requireAuth, async (req, res) => {
+  try {
+    const today = utcDay()
+    const data = await prisma.activityDay.findMany({
+      where: { userId: req.user.id, date: { lte: today } },
+      orderBy: { date: 'desc' },
+      take: 366,
+      select: { date: true }
+    })
+    res.json({ data: buildStreakSummary(data.map(item => item.date), today) })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Streak data is temporarily unavailable' })
   }
 })
 
@@ -269,6 +306,7 @@ app.patch('/api/goals/:type/progress', requireAuth, async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Create today’s goal before recording progress' })
     const completed = Math.min(existing.target, existing.completed + increment)
     const data = await prisma.goal.update({ where: { id: existing.id }, data: { completed } })
+    await recordActivity(req.user.id)
     res.json({ data })
   } catch (error) {
     console.error(error)
