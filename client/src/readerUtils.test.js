@@ -1,32 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { clampAyahIndex, filterSurahs, parseAyahNumber, progressPercent } from './readerUtils.js'
+import { clampNumber, formatAudioTime, nextAyahNumber, normalizeRepeatCount, readingTheme } from './readerUtils.js'
 
-test('clampAyahIndex keeps navigation inside a Surah', () => {
-  assert.equal(clampAyahIndex(-2, 7), 0)
-  assert.equal(clampAyahIndex(2, 7), 2)
-  assert.equal(clampAyahIndex(99, 7), 6)
+test('normalizes supported repeat counts', () => {
+  assert.equal(normalizeRepeatCount(3), 3)
+  assert.equal(normalizeRepeatCount('infinity'), Infinity)
+  assert.equal(normalizeRepeatCount(9), 1)
 })
 
-test('progressPercent reports inclusive reading progress', () => {
-  assert.equal(progressPercent(0, 7), 14)
-  assert.equal(progressPercent(6, 7), 100)
-  assert.equal(progressPercent(0, 0), 0)
+test('clamps and advances ayah positions safely', () => {
+  assert.equal(clampNumber(9, 1, 7), 7)
+  assert.equal(clampNumber(-2, 1, 7), 1)
+  assert.equal(nextAyahNumber(7, 7, 1), 7)
+  assert.equal(nextAyahNumber(1, 7, -1), 1)
+  assert.equal(nextAyahNumber(3, 7, 1), 4)
 })
 
-test('filterSurahs searches number, English and Arabic names', () => {
-  const catalog = [
-    { number: 1, englishName: 'Al-Fatihah', name: 'الفاتحة', englishNameTranslation: 'The Opening' },
-    { number: 2, englishName: 'Al-Baqarah', name: 'البقرة', englishNameTranslation: 'The Cow' }
-  ]
-  assert.equal(filterSurahs(catalog, 'opening').length, 1)
-  assert.equal(filterSurahs(catalog, 'البقرة')[0].number, 2)
-  assert.equal(filterSurahs(catalog, '2')[0].number, 2)
+test('formats audio time', () => {
+  assert.equal(formatAudioTime(0), '0:00')
+  assert.equal(formatAudioTime(65.9), '1:05')
+  assert.equal(formatAudioTime('bad'), '0:00')
 })
 
-test('parseAyahNumber validates direct navigation input', () => {
-  assert.equal(parseAyahNumber('5', 7), 5)
-  assert.equal(parseAyahNumber('0', 7), null)
-  assert.equal(parseAyahNumber('8', 7), null)
-  assert.equal(parseAyahNumber('x', 7), null)
+test('resolves reading theme', () => {
+  assert.equal(readingTheme('light', true), 'light')
+  assert.equal(readingTheme('dark', false), 'dark')
+  assert.equal(readingTheme('auto', true), 'dark')
+  assert.equal(readingTheme('auto', false), 'light')
 })
