@@ -7,6 +7,8 @@ import AdminDashboard from './AdminDashboard.jsx'
 import QuranSearch from './QuranSearch.jsx'
 import ProgressDashboard from './ProgressDashboard.jsx'
 import Memorize from './Memorize.jsx'
+import SurahIndex from './SurahIndex.jsx'
+import SurahDetail from './SurahDetail.jsx'
 import { getStreaks } from './accountApi'
 import { streakLabel, summarizeStreak } from './progressUtils.js'
 import './styles.css'
@@ -55,6 +57,8 @@ function Root() {
   if (pathname === '/search' || pathname.startsWith('/search/')) return <QuranSearch />
   if (pathname === '/progress' || pathname.startsWith('/progress/')) return <ProgressDashboard />
   if (pathname === '/memorize' || pathname.startsWith('/memorize/')) return <Memorize />
+  if (/^\/surah\/\d+\/?$/.test(pathname)) return <SurahDetail />
+  if (pathname === '/' || pathname === '') return <><SurahIndex /><ProgressBadge /></>
   return <><AppReaderShell /><ProgressBadge /></>
 }
 
