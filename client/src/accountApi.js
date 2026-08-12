@@ -30,8 +30,18 @@ const readLocalBookmarkIds = () => {
   }
 }
 
-export const login = (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-export const register = (email, password, name) => request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) })
+export const login = async (email, password) => {
+  const result = await request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+  await syncLocalBookmarks(result.token)
+  return result
+}
+
+export const register = async (email, password, name) => {
+  const result = await request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) })
+  await syncLocalBookmarks(result.token)
+  return result
+}
+
 export const getMe = (token) => request('/auth/me', { token })
 export const listBookmarks = (token) => request('/bookmarks', { token })
 export const saveBookmark = (token, ayahId) => request(`/bookmarks/${ayahId}`, { method: 'PUT', token })
@@ -45,7 +55,6 @@ export const updateGoal = (token, type, target, completed, date) => request(`/go
 /**
  * Merge bookmarks created while the reader was signed out into the account.
  * This is deliberately best-effort: a temporary API failure must not block login.
- * The follow-up listBookmarks call in the reader becomes the authoritative state.
  */
 export const syncLocalBookmarks = async (token, remoteBookmarks = []) => {
   const remoteIds = new Set(remoteBookmarks.map(item => Number(item?.ayah?.id)).filter(Number.isInteger))
@@ -54,7 +63,7 @@ export const syncLocalBookmarks = async (token, remoteBookmarks = []) => {
     try {
       await saveBookmark(token, ayahId)
     } catch {
-      // Keep login resilient when a bookmark points at unavailable/stale Quran data.
+      // Ignore stale IDs or temporary provider/database failures during authentication.
     }
   }
   return pendingIds.length
