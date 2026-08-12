@@ -60,6 +60,7 @@ export default function SingleAyahMode({
   useEffect(() => {
     // Best effort: some browsers require fullscreen to be requested directly
     // from a user gesture. The pointer handler below retries on the first tap.
+    fullscreenAttemptedRef.current = true
     requestReaderFullscreen()
 
     const handleFullscreenChange = () => {
