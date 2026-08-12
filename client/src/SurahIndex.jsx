@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, BookOpen, Bookmark, Clock3, Grid2X2, List, Search, Sparkles } from 'lucide-react'
 import ReaderNavigation from './ReaderNavigation.jsx'
 import { listSurahs } from './quranApi'
+import { readReaderResume } from './readerResumeUtils.js'
 
 const quickSurahs = [1, 36, 55, 67]
 
@@ -11,7 +12,7 @@ export default function SurahIndex() {
   const [view, setView] = useState('grid')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [lastRead, setLastRead] = useState(() => Number(localStorage.getItem('tarteel:last-surah') || 1))
+  const [resume, setResume] = useState(() => readReaderResume(window.localStorage))
 
   useEffect(() => {
     const controller = new AbortController()
@@ -20,6 +21,13 @@ export default function SurahIndex() {
       .catch((err) => { if (err.name !== 'AbortError') setError('Unable to load the Surah index. Please retry.') })
       .finally(() => setLoading(false))
     return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const refreshResume = () => setResume(readReaderResume(window.localStorage))
+    window.addEventListener('focus', refreshResume)
+    window.addEventListener('storage', refreshResume)
+    return () => { window.removeEventListener('focus', refreshResume); window.removeEventListener('storage', refreshResume) }
   }, [])
 
   const filtered = useMemo(() => {
@@ -33,12 +41,11 @@ export default function SurahIndex() {
     )
   }, [surahs, query])
 
-  const lastSurah = surahs.find((surah) => surah.number === lastRead) || surahs[0]
+  const lastSurah = surahs.find((surah) => surah.number === resume?.surahNumber) || surahs[0]
   const quick = quickSurahs.map((number) => surahs.find((surah) => surah.number === number)).filter(Boolean)
 
   const rememberSurah = (number) => {
-    setLastRead(number)
-    localStorage.setItem('tarteel:last-surah', String(number))
+    try { localStorage.setItem('tarteel:last-surah', String(number)) } catch {}
   }
 
   return <div className="min-h-screen bg-[#f7faf8] text-slate-900">
@@ -57,7 +64,7 @@ export default function SurahIndex() {
               <p className="mt-4 max-w-2xl text-sm leading-7 text-emerald-50/90 sm:text-base">Read every Surah with a focused interface built for clarity, reflection and consistent daily practice.</p>
               {lastSurah && <a href={`/surah/${lastSurah.number}`} onClick={() => rememberSurah(lastSurah.number)} className="mt-7 inline-flex items-center gap-3 rounded-2xl bg-white px-5 py-3.5 text-sm font-bold text-emerald-900 shadow-lg shadow-emerald-950/10 hover:-translate-y-0.5 hover:shadow-xl">
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50"><BookOpen size={17} /></span>
-                <span className="text-left"><span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Continue reading</span><span className="mt-0.5 block">{lastSurah.englishName}</span></span>
+                <span className="text-left"><span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Continue reading</span><span className="mt-0.5 block">{lastSurah.englishName}{resume?.surahNumber === lastSurah.number ? ` · Ayah ${resume.ayahNumber}` : ''}</span></span>
                 <ArrowRight size={17} />
               </a>}
             </div>
