@@ -73,9 +73,12 @@ For a Coolify application using this repository:
 3. Set the application port to **3000**.
 4. Configure `DATABASE_URL` for PostgreSQL and `AUTH_SECRET` with at least 32 random characters.
 5. Optionally set `ADMIN_EMAILS` to a comma-separated list of administrator email addresses.
-6. Deploy from `main` and verify `GET /api/health` returns `ok: true` when the database is reachable.
+6. If Coolify terminates the reverse proxy in front of the container, set `TRUST_PROXY=true` so rate limiting can distinguish real client IPs safely.
+7. Deploy from `main` and verify `GET /api/health` returns `ok: true` when the database is reachable.
 
 The Docker image intentionally runs both the web server and API behind port `3000`; do not expose port `4000` publicly. The web server proxies `/api` internally to the API process.
+
+The Docker `HEALTHCHECK` validates both the HTTP response and the API's JSON `ok` field. This prevents a database outage from being reported as a healthy container merely because Express is still listening.
 
 ### Coolify / Nixpacks
 
