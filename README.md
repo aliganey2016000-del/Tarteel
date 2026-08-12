@@ -60,6 +60,27 @@ Admin endpoints require a valid bearer token and a database-backed `ADMIN` role:
 
 The authorization middleware re-checks the database role on every admin request, so removing the role takes effect immediately without waiting for token expiry.
 
+## Production deployment
+
+### Coolify / Nixpacks
+
+The repository includes `nixpacks.toml` for the monorepo. The production entrypoint is `server/src/production.js`: it serves the built React app on port `3000` and proxies `/api` requests to the Express API on port `4000`.
+
+For a Coolify application using this repository:
+
+1. Use **Nixpacks** as the build pack.
+2. Set the application port to **3000**.
+3. Keep the build/start commands from `nixpacks.toml`; the start command must be `node server/src/production.js`.
+4. Configure `DATABASE_URL` for PostgreSQL and `AUTH_SECRET` with at least 32 random characters.
+5. Optionally set `ADMIN_EMAILS` to a comma-separated list of administrator email addresses.
+6. Deploy from `main` and verify `GET /api/health` returns `ok: true` when the database is reachable.
+
+Do not expose port `4000` publicly when using the combined production entrypoint; the frontend server proxies API traffic internally.
+
+### Docker Compose
+
+`docker-compose.prod.yml` provides separate PostgreSQL, API, and web services for deployments that prefer a multi-container topology.
+
 ## Development
 
 ```bash
