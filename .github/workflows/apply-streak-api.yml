@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   integrate:
-    if: ${{ !contains(github.event.head_commit.message, 'feat(progress): integrate streak API') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +16,8 @@ jobs:
           fetch-depth: 0
 
       - name: Wire streak API into Express
-        shell: python
         run: |
+          python3 - <<'PY'
           from pathlib import Path
           import re
 
@@ -26,7 +25,8 @@ jobs:
           text = path.read_text()
 
           if "./streaks.js" in text:
-              raise SystemExit('streak API already integrated')
+              print('streak API already integrated')
+              raise SystemExit(0)
 
           text = text.replace(
               "import { PrismaClient } from '@prisma/client'",
@@ -35,13 +35,48 @@ jobs:
           )
 
           marker = "const validGoalType = (value) => ['MEMORIZE', 'REVIEW', 'RECITE'].includes(value)"
-          helper = """const recordActivity = async (userId) => {\n  const date = utcDay()\n  return prisma.activityDay.upsert({\n    where: { userId_date: { userId, date } },\n    create: { userId, date },\n    update: {}\n  })\n}\n\n"""
+          helper = """const recordActivity = async (userId) => {
+            const date = utcDay()
+            return prisma.activityDay.upsert({
+              where: { userId_date: { userId, date } },
+              create: { userId, date },
+              update: {}
+            })
+          }
+
+          """
           if marker not in text:
               raise SystemExit('streak insertion marker not found')
           text = text.replace(marker, helper + marker, 1)
 
           route_marker = "app.get('/api/goals', requireAuth, async (req, res) => {"
-          routes = """app.post('/api/activity', requireAuth, async (req, res) => {\n  try {\n    const activity = await recordActivity(req.user.id)\n    res.status(201).json({ data: { id: activity.id, date: activity.date } })\n  } catch (error) {\n    console.error(error)\n    res.status(503).json({ error: 'Activity tracking is temporarily unavailable' })\n  }\n})\n\napp.get('/api/streaks', requireAuth, async (req, res) => {\n  try {\n    const today = utcDay()\n    const data = await prisma.activityDay.findMany({\n      where: { userId: req.user.id, date: { lte: today } },\n      orderBy: { date: 'desc' },\n      take: 366,\n      select: { date: true }\n    })\n    res.json({ data: buildStreakSummary(data.map(item => item.date), today) })\n  } catch (error) {\n    console.error(error)\n    res.status(503).json({ error: 'Streak data is temporarily unavailable' })\n  }\n})\n\n"""
+          routes = """app.post('/api/activity', requireAuth, async (req, res) => {
+            try {
+              const activity = await recordActivity(req.user.id)
+              res.status(201).json({ data: { id: activity.id, date: activity.date } })
+            } catch (error) {
+              console.error(error)
+              res.status(503).json({ error: 'Activity tracking is temporarily unavailable' })
+            }
+          })
+
+          app.get('/api/streaks', requireAuth, async (req, res) => {
+            try {
+              const today = utcDay()
+              const data = await prisma.activityDay.findMany({
+                where: { userId: req.user.id, date: { lte: today } },
+                orderBy: { date: 'desc' },
+                take: 366,
+                select: { date: true }
+              })
+              res.json({ data: buildStreakSummary(data.map(item => item.date), today) })
+            } catch (error) {
+              console.error(error)
+              res.status(503).json({ error: 'Streak data is temporarily unavailable' })
+            }
+          })
+
+          """
           if route_marker not in text:
               raise SystemExit('goals route marker not found')
           text = text.replace(route_marker, routes + route_marker, 1)
@@ -61,6 +96,7 @@ jobs:
           text = text[:match.start(1)] + block + text[match.end(1):]
 
           path.write_text(text)
+          PY
 
       - name: Validate changes
         run: |
@@ -68,11 +104,11 @@ jobs:
           node --check server/src/streaks.js
           node --test server/src/streaks.test.js
 
-      - name: Commit integrated API
+      - name: Commit integrated API and remove one-time workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/src/index.js .github/workflows/apply-streak-api.yml
+          git add server/src/index.js
           git rm .github/workflows/apply-streak-api.yml
           git commit -m "feat(progress): integrate streak API"
           git push origin main
