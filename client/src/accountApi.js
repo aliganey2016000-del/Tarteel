@@ -1,4 +1,4 @@
-import { getToken } from './authApi'
+import { getToken } from './authApi.js'
 
 const API_BASE = (import.meta.env?.VITE_API_URL || '/api').replace(/\/$/, '')
 const READER_STORAGE_KEY = 'tarteel:surah-detail:v3'
@@ -46,8 +46,6 @@ const readLocalBookmarks = () => {
       }
     }
   }
-
-  // Preserve bookmarks from the older reader storage format during migration.
   const legacy = readJson(LEGACY_READER_STORAGE_KEY, {})
   if (Array.isArray(legacy.bookmarks)) {
     for (const id of legacy.bookmarks) {
@@ -108,7 +106,6 @@ export const syncLocalBookmarks = async (token = getToken(), remoteBookmarks = n
   const local = readLocalBookmarks()
   const remoteKeys = new Set(remote.map(item => normalizeBookmarkKey(item?.ayah?.surah?.number, item?.ayah?.number)).filter(key => !key.startsWith('NaN:')))
   let uploaded = 0
-
   for (const row of local) {
     if (row.ayahId) {
       try { await saveBookmark(token, row.ayahId); uploaded += 1 } catch { /* stale legacy ids are ignored */ }
@@ -116,10 +113,7 @@ export const syncLocalBookmarks = async (token = getToken(), remoteBookmarks = n
     }
     const key = normalizeBookmarkKey(row.surahNumber, row.ayahNumber)
     if (remoteKeys.has(key)) continue
-    // The global ayah id is not encoded in local v3 state. It is resolved by
-    // the reader when it has Quran provider data; do not guess an ID here.
   }
-
   const freshRemote = uploaded ? await listBookmarks(token) : remote
   const merged = [...local.filter(row => row.surahNumber && row.ayahNumber), ...freshRemote.map(item => ({
     surahNumber: Number(item?.ayah?.surah?.number),
