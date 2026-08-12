@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BarChart3, BookOpen, Brain, Menu, Search, X } from 'lucide-react'
 
 const items = [
-  { label: 'Quran Reader', href: '/', icon: BookOpen, description: 'Read ayah by ayah' },
+  { label: 'Quran Reader', href: '/', icon: BookOpen, description: 'Browse Surahs and read ayahs' },
   { label: 'Search Quran', href: '/search', icon: Search, description: 'Find a surah or ayah' },
   { label: 'Memorize', href: '/memorize', icon: Brain, description: 'Review and strengthen hifz' },
   { label: 'Progress', href: '/progress', icon: BarChart3, description: 'Goals, streaks and activity' },
@@ -36,7 +36,9 @@ export default function ReaderNavigation() {
   const [open, setOpen] = useState(false)
   const pathname = window.location.pathname
   const close = () => setOpen(false)
-  const isActive = item => item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`)
+  const isActive = item => item.href === '/'
+    ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname)
+    : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   useEffect(() => {
     const onKeyDown = event => { if (event.key === 'Escape') close() }
@@ -54,7 +56,7 @@ export default function ReaderNavigation() {
       <button type="button" onClick={() => setOpen(value => !value)} aria-label={open ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={open} aria-controls="tarteel-reader-navigation" className="fixed left-3 top-3 z-[70] grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white/95 text-slate-700 shadow-lg backdrop-blur lg:hidden">
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
-      {open && <button type="button" aria-label="Close navigation overlay" onClick={close} className="fixed inset-0 z-[55] bg-slate-950/35 backdrop-blur-[2px] lg:hidden" />}
+      {open && <button type="button" aria-label="Close navigation overlay" onClick={close} className="fixed inset-0 z-[55] bg-slate-950/35 backdrop-blur-[2px] lg:hidden />}
       <aside id="tarteel-reader-navigation" aria-label="Primary navigation" className={`fixed inset-y-0 left-0 z-[60] flex w-[min(86vw,292px)] flex-col border-r border-slate-200 bg-white shadow-2xl transition-transform duration-200 lg:w-[272px] lg:translate-x-0 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-5">
           <span className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-700 text-white"><BookOpen size={20} /></span>
