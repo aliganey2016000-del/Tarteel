@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Flame } from 'lucide-react'
 import AppReaderShell from './AppReaderShell.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import QuranSearch from './QuranSearch.jsx'
 import ProgressDashboard from './ProgressDashboard.jsx'
 import Memorize from './Memorize.jsx'
@@ -65,7 +66,9 @@ function Root() {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <Root />
+      <ErrorBoundary>
+        <Root />
+      </ErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>
 )
