@@ -15,7 +15,7 @@ A modern, mobile-first Quran learning platform focused on reading, recitation, m
 
 - `client/` — React frontend
 - `server/` — Express API
-- `prisma/` — database schema
+- `prisma/` — database schema and migrations
 
 ## Current MVP
 
@@ -29,11 +29,16 @@ A modern, mobile-first Quran learning platform focused on reading, recitation, m
 - Responsive mobile-first design
 - Account registration, login, and protected `/api/auth/me`
 - Database-backed Surah API
+- Database-backed bookmarks and reading progress
+- Daily goals and recitation session APIs
+- Role-based admin foundation with protected operational statistics and user listing
 - Helmet, CORS, JSON-size limits, and graceful Prisma shutdown
 
 ## Authentication configuration
 
 Copy `server/.env.example` to `server/.env` and set a unique `AUTH_SECRET` of at least 32 characters. Never commit the real secret. `DATABASE_URL` must point to the PostgreSQL database used by Prisma.
+
+`ADMIN_EMAILS` is an optional comma-separated allowlist. A new account whose normalized email matches this allowlist is created with the `ADMIN` role. Existing users can be promoted by an authorized database operator. The application never contains a real admin credential.
 
 Authentication endpoints:
 
@@ -42,6 +47,15 @@ Authentication endpoints:
 - `GET /api/auth/me` — retrieve the authenticated user with `Authorization: Bearer <token>`
 
 Passwords are hashed with Node.js `scrypt`; plaintext passwords are never stored.
+
+## Admin API
+
+Admin endpoints require a valid bearer token and a database-backed `ADMIN` role:
+
+- `GET /api/admin/stats` — aggregate users, bookmarks, goals, and recitation sessions
+- `GET /api/admin/users?limit=50` — recent users with activity counts
+
+The authorization middleware re-checks the database role on every admin request, so removing the role takes effect immediately without waiting for token expiry.
 
 ## Development
 
@@ -57,5 +71,7 @@ cd server
 npm run prisma:generate
 npm run prisma:migrate
 ```
+
+The user-role migration is under `prisma/migrations/20260812045100_user_roles`.
 
 See the individual `client` and `server` packages for environment configuration.
