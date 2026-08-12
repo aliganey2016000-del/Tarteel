@@ -1,16 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { audioUrlForAyah, normalizeSearchResults, searchEditionForQuery, searchQuran } from './quranApi.js'
+import { RECITERS, audioUrlForAyah, normalizeSearchResults, searchEditionForQuery, searchQuran } from './quranApi.js'
 
 test('uses provider audio when available', () => {
   assert.equal(audioUrlForAyah(255, 'https://example.test/255.mp3'), 'https://example.test/255.mp3')
 })
 
-test('falls back to the Alafasy CDN for missing provider audio', () => {
+test('falls back to the selected reciter CDN for missing provider audio', () => {
   assert.equal(
-    audioUrlForAyah(255),
-    'https://cdn.islamic.network/quran/audio/128/ar.alafasy/255.mp3'
+    audioUrlForAyah(255, null, 'ar.husary'),
+    'https://cdn.islamic.network/quran/audio/128/ar.husary/255.mp3'
   )
+})
+
+test('exposes a curated multi-reciter catalog', () => {
+  assert.ok(RECITERS.length >= 6)
+  assert.equal(RECITERS[0].id, 'ar.alafasy')
+  assert.equal(RECITERS.some(reciter => reciter.id === 'ar.husary'), true)
+  assert.equal(RECITERS.some(reciter => reciter.id === 'ar.sudais'), true)
 })
 
 test('selects Arabic search edition for Arabic queries', () => {
