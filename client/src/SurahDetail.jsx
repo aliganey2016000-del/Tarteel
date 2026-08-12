@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Bookmark, BookmarkCheck, Check, ChevronLeft, ChevronRight, Copy, Eye,
-  Gauge, Headphones, Minus, MoreVertical, Pause, Play, Plus, Repeat2, Search, Settings2,
-  Share2, Sun, Moon, Volume2, X
+  Gauge, Headphones, Minus, MoreVertical, Moon, Pause, Play, Plus, Repeat2, Search, Settings2,
+  Share2, Sun, Volume2, X
 } from 'lucide-react'
 import ReaderNavigation from './ReaderNavigation.jsx'
 import SingleAyahMode from './SingleAyahMode.jsx'
 import { getSurah, RECITERS } from './quranApi'
+import { getToken } from './authApi'
+import { listBookmarks, getProgress, saveBookmark, removeBookmark, saveProgress } from './accountApi'
 import {
   REPEAT_COUNTS, clampNumber, formatAudioTime, nextAyahNumber,
   normalizeRepeatCount, readingTheme
@@ -62,6 +64,17 @@ function highlightText(text, query) {
     : part)
 }
 
+const mergeRemoteBookmarks = (current, remote) => {
+  const next = { ...current }
+  for (const item of remote || []) {
+    const surahNumber = Number(item?.ayah?.surah?.number)
+    const ayahNumber = Number(item?.ayah?.number)
+    if (!Number.isInteger(surahNumber) || surahNumber < 1 || surahNumber > 114 || !Number.isInteger(ayahNumber) || ayahNumber < 1) continue
+    next[surahNumber] = { ...(next[surahNumber] || {}), [ayahNumber]: { timestamp: item?.createdAt || new Date().toISOString(), readingPosition: ayahNumber } }
+  }
+  return next
+}
+
 export default function SurahDetail() {
   const surahNumber = getSurahNumber()
   const initialSettings = getInitialSettings()
@@ -106,6 +119,29 @@ export default function SurahDetail() {
   }, [])
 
   useEffect(() => { saveState({ ...getState(), settings }) }, [settings])
+
+  useEffect(() => {
+    const token = getToken()
+    if (!token) return undefined
+    let cancelled = false
+    Promise.all([listBookmarks(token), getProgress(token)]).then(([remoteBookmarks, progress]) => {
+      if (cancelled) return
+      setBookmarks(current => {
+        const merged = mergeRemoteBookmarks(current, remoteBookmarks)
+        saveState({ ...getState(), bookmarks: merged, settings, memorized })
+        return merged
+      })
+      if (Number(progress?.surahNumber) === surahNumber && Number.isInteger(Number(progress?.ayahNumber)) && Number(progress.ayahNumber) > 0) {
+        const next = Number(progress.ayahNumber)
+        activeAyahRef.current = next
+        setActiveAyah(next)
+        saveState({ ...getState(), [surahNumber]: next, settings, bookmarks: getState().bookmarks || bookmarks, memorized })
+      }
+    }).catch(() => {
+      // Cloud sync is intentionally non-blocking. Local reader state remains authoritative offline.
+    })
+    return () => { cancelled = true }
+  }, [surahNumber])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -164,7 +200,11 @@ export default function SurahDetail() {
   const rangeEnd = clampNumber(Math.max(settings.rangeEnd, rangeStart), 1, surah?.ayahCount || 1)
   const selectedReciter = RECITERS.find(item => item.id === settings.reciter) || RECITERS[0]
 
-  const persistPosition = number => saveState({ ...getState(), [surahNumber]: number, bookmarks, settings, memorized })
+  const persistPosition = number => {
+    saveState({ ...getState(), [surahNumber]: number, bookmarks, settings, memorized })
+    const token = getToken()
+    if (token) void saveProgress(token, surahNumber, number).catch(() => {})
+  }
 
   const setAyah = number => {
     const next = clampNumber(number, 1, surah?.ayahCount || 1)
@@ -265,11 +305,21 @@ export default function SurahDetail() {
   const toggleBookmark = ayahNumber => {
     const next = { ...bookmarks }
     const existing = next[surahNumber] || {}
-    if (existing[ayahNumber]) delete next[surahNumber][ayahNumber]
+    const removing = Boolean(existing[ayahNumber])
+    if (removing) delete next[surahNumber][ayahNumber]
     else next[surahNumber] = { ...existing, [ayahNumber]: { timestamp: new Date().toISOString(), readingPosition: ayahNumber } }
     if (next[surahNumber] && Object.keys(next[surahNumber]).length === 0) delete next[surahNumber]
     setBookmarks(next)
     saveState({ ...getState(), bookmarks: next, [surahNumber]: activeAyah, settings, memorized })
+
+    const token = getToken()
+    const ayah = surahRef.current?.ayahs.find(item => item.numberInSurah === ayahNumber)
+    if (token && ayah?.number) {
+      const operation = removing ? removeBookmark(token, ayah.number) : saveBookmark(token, ayah.number)
+      void operation.catch(() => {
+        // Keep the local bookmark even if the network is temporarily unavailable.
+      })
+    }
   }
 
   const toggleMemorized = ayahNumber => {
@@ -403,81 +453,45 @@ export default function SurahDetail() {
             {filteredAyahs.length === 0 && <div className={`rounded-2xl border border-dashed p-10 text-center text-sm ${cardSurface} ${mutedText}`}>No ayahs match “{query}”.</div>}
           </section>
 
-          <footer className={`sticky bottom-3 z-20 mt-5 flex items-center justify-between gap-3 rounded-2xl border p-3 shadow-lg backdrop-blur ${isDark ? 'border-slate-700 bg-slate-900/95' : 'border-slate-200 bg-white/95'}`}>
-            <button type="button" disabled={activeAyah <= 1} onClick={() => scrollToAyah(nextAyahNumber(activeAyah, surah.ayahCount, -1))} className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-40"><ChevronLeft size={17}/> Previous</button>
-            <div className="text-center"><p className={`text-[11px] font-semibold uppercase tracking-wide ${mutedText}`}>Reading · {Math.round((activeAyah / surah.ayahCount) * 100)}%</p><p className="text-sm font-bold">Ayah {activeAyah} / {surah.ayahCount}</p></div>
-            <button type="button" disabled={activeAyah >= surah.ayahCount} onClick={() => scrollToAyah(nextAyahNumber(activeAyah, surah.ayahCount, 1))} className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-40">Next <ChevronRight size={17}/></button>
+          <footer className={`sticky bottom-3 z-20 mt-5 flex items-center justify-between gap-3 rounded-2xl border p-3 shadow-lg backdrop-blur ${isDark ? 'border-slate-700 bg-slate-900/90' : 'border-slate-200 bg-white/90'}`}>
+            <button type="button" onClick={playerPrevious} disabled={!surah || activeAyah <= 1} className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-600 disabled:opacity-40" aria-label="Previous ayah"><ChevronLeft size={18}/></button>
+            <button type="button" onClick={() => toggleAudio(currentAyah)} disabled={!currentAyah} className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-700 text-white shadow-lg disabled:opacity-50" aria-label={playing ? 'Pause recitation' : 'Play recitation'}>{playing ? <Pause size={18}/> : <Play size={18}/>}</button>
+            <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2 text-xs font-semibold"><span>Ayah {activeAyah}</span><span>{formatAudioTime(audioTime)} / {formatAudioTime(audioDuration)}</span></div><input aria-label="Recitation progress" type="range" min="0" max={audioDuration || 0} step="0.1" value={Math.min(audioTime, audioDuration || 0)} onChange={event => { if (audioRef.current) audioRef.current.currentTime = Number(event.target.value); setAudioTime(Number(event.target.value)) }} className="mt-1 w-full accent-emerald-700"/></div>
+            <button type="button" onClick={playerNext} disabled={!surah || activeAyah >= surah.ayahCount} className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-600 disabled:opacity-40" aria-label="Next ayah"><ChevronRight size={18}/></button>
           </footer>
         </>}
       </div>
     </main>
-
-    {surah && currentAyah && <AudioPlayer currentAyah={currentAyah} playing={playing} onToggle={() => toggleAudio(currentAyah)} onPrevious={playerPrevious} onNext={playerNext} audioTime={audioTime} audioDuration={audioDuration} onSeek={value => { if (audioRef.current) audioRef.current.currentTime = value; setAudioTime(value) }} repeatMode={repeatMode} repeatCount={repeatCount} repeatsDone={repeatsDone} onRepeatMode={() => updateSetting('repeatMode', repeatMode === 'off' ? 'ayah' : repeatMode === 'ayah' ? 'range' : 'off')} isDark={isDark} reciter={selectedReciter.name} speed={settings.speed}/>} 
   </div>
 }
+
+function AyahActions({ ayah, bookmarked, memorized, onBookmark, onPlay, onCopy, onShare, onRepeat, onMemorize, onSingleAyah, isDark }) {
+  return <div className={`absolute right-0 top-11 z-40 w-56 rounded-2xl border p-2 shadow-xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+    <button onClick={onBookmark} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Bookmark size={15}/>{bookmarked ? 'Remove bookmark' : 'Bookmark ayah'}</button>
+    <button onClick={onPlay} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Play size={15}/> Play ayah</button>
+    <button onClick={onRepeat} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Repeat2 size={15}/> Repeat</button>
+    <button onClick={onMemorize} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Check size={15}/>{memorized ? 'Unmark memorized' : 'Mark memorized'}</button>
+    <button onClick={onCopy} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Copy size={15}/> Copy</button>
+    <button onClick={onShare} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Share2 size={15}/> Share</button>
+    <button onClick={onSingleAyah} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50"><Eye size={15}/> Single Ayah focus</button>
+  </div>
+}
+
+function SettingRow({ label, children }) { return <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span>{children}</label> }
 
 function ReadingSettings({ settings, updateSetting, close, isDark, surahCount, selectedReciter }) {
-  const setRange = (key, value) => {
-    const next = clampNumber(value, 1, surahCount)
-    if (key === 'rangeStart') updateSetting(key, Math.min(next, Number(settings.rangeEnd) || surahCount))
-    else updateSetting(key, Math.max(next, Number(settings.rangeStart) || 1))
-  }
-  return <section id="reader-settings" aria-label="Reader controls" className={`mt-3 rounded-2xl border p-4 shadow-lg sm:p-5 ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
-    <div className="flex items-center justify-between"><div><h2 className="font-semibold">Reader controls</h2><p className="mt-1 text-xs text-slate-500">Audio, text and display settings are saved on this device.</p></div><button type="button" onClick={close} aria-label="Close reader controls" className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-600"><X size={16}/></button></div>
-    <div className="mt-5 grid gap-5 md:grid-cols-2">
-      <div className="rounded-xl border p-3 md:col-span-2"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Audio · Reciter</p><select value={settings.reciter} onChange={event => updateSetting('reciter', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2.5 text-sm font-semibold" aria-label="Select reciter">{RECITERS.map(reciter => <option key={reciter.id} value={reciter.id}>{reciter.name} · {reciter.style}</option>)}</select><p className="mt-2 text-[11px] text-slate-500">Current: {selectedReciter.name}. Audio is streamed from the configured Quran provider.</p></div>
-      <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Playback speed</p><div className="grid grid-cols-4 gap-2">{[0.75, 1, 1.25, 1.5].map(value => <button key={value} type="button" onClick={() => updateSetting('speed', value)} className={`rounded-xl border px-2 py-2 text-xs font-semibold ${Number(settings.speed) === value ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : isDark ? 'border-slate-700' : 'border-slate-200'}`}>{value}×</button>)}</div></div>
-      <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat</p><div className="grid grid-cols-3 gap-2">{[['off','Off'],['ayah','Ayah'],['range','Range']].map(([value,label]) => <button key={value} type="button" onClick={() => updateSetting('repeatMode', value)} className={`rounded-xl border px-2 py-2 text-xs font-semibold ${settings.repeatMode === value ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : isDark ? 'border-slate-700' : 'border-slate-200'}`}>{label}</button>)}</div></div>
-      {settings.repeatMode === 'ayah' && <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Ayah repeats</p><div className="grid grid-cols-4 gap-2">{REPEAT_COUNTS.map(value => <button key={String(value)} type="button" onClick={() => updateSetting('repeatCount', value)} className={`rounded-xl border px-2 py-2 text-xs font-semibold ${normalizeRepeatCount(settings.repeatCount) === value ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : isDark ? 'border-slate-700' : 'border-slate-200'}`}>{value === Infinity ? '∞' : `${value}×`}</button>)}</div></div>}
-      {settings.repeatMode === 'range' && <div className="rounded-xl border p-3 md:col-span-2"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat range · Ayah A → B</p><div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Start<input type="number" min="1" max={surahCount} value={settings.rangeStart} onChange={event => setRange('rangeStart', event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2.5 text-sm"/></label><label className="text-xs font-semibold">End<input type="number" min="1" max={surahCount} value={settings.rangeEnd} onChange={event => setRange('rangeEnd', event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2.5 text-sm"/></label></div></div>}
-      <SettingSlider label="Arabic font size" value={settings.arabicSize} min={24} max={52} step={1} onChange={value => updateSetting('arabicSize', Number(value))} suffix="px"/>
-      <SettingSlider label="Translation font size" value={settings.translationSize} min={13} max={22} step={1} onChange={value => updateSetting('translationSize', Number(value))} suffix="px"/>
-      <SettingSlider label="Line spacing" value={settings.lineSpacing} min={1.5} max={3} step={0.1} onChange={value => updateSetting('lineSpacing', Number(value))} suffix="×"/>
-      <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Arabic font</p><div className="grid grid-cols-3 gap-2">{FONT_OPTIONS.map(font => <button key={font.value} type="button" onClick={() => updateSetting('arabicFont', font.value)} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${settings.arabicFont === font.value ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : isDark ? 'border-slate-700' : 'border-slate-200'}`}>{font.label}</button>)}</div></div>
-      <ToggleSetting label="Translation" description="Show the Saheeh International translation" value={settings.translationVisible} onChange={value => updateSetting('translationVisible', value)} />
-      <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Reading mode</p><div className="grid grid-cols-3 gap-2">{[['light','Light',Sun],['dark','Dark',Moon],['auto','Auto',Gauge]].map(([value,label,Icon]) => <button key={value} type="button" onClick={() => updateSetting('theme', value)} className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${settings.theme === value ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : isDark ? 'border-slate-700' : 'border-slate-200'}`}><Icon size={14}/>{label}</button>)}</div></div>
-      <ToggleSetting label="Tajweed highlight" description="Reserved for verified color-coded Tajweed data" value={settings.tajweed} onChange={value => updateSetting('tajweed', value)} disabled />
+  return <section id="reader-settings" className={`mt-4 rounded-2xl border p-4 shadow-sm ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+    <div className="flex items-center justify-between"><div><h2 className="font-bold">Reader controls</h2><p className="text-xs text-slate-500">Tune text, audio and repeat behaviour.</p></div><button onClick={close} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-600" aria-label="Close reader controls"><X size={17}/></button></div>
+    <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <SettingRow label={`Arabic size · ${settings.arabicSize}px`}><div className="flex items-center gap-2"><button type="button" className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100" onClick={() => updateSetting('arabicSize', Math.max(28, settings.arabicSize - 2))}><Minus size={15}/></button><input type="range" min="28" max="72" value={settings.arabicSize} onChange={e => updateSetting('arabicSize', Number(e.target.value))} className="w-full accent-emerald-700"/><button type="button" className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100" onClick={() => updateSetting('arabicSize', Math.min(72, settings.arabicSize + 2))}><Plus size={15}/></button></div></SettingRow>
+      <SettingRow label={`Translation size · ${settings.translationSize}px`}><input type="range" min="12" max="24" value={settings.translationSize} onChange={e => updateSetting('translationSize', Number(e.target.value))} className="w-full accent-emerald-700"/></SettingRow>
+      <SettingRow label="Arabic font"><select value={settings.arabicFont} onChange={e => updateSetting('arabicFont', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="uthmani">Uthmani</option><option value="naskh">Naskh</option><option value="system">System</option></select></SettingRow>
+      <SettingRow label="Theme"><select value={settings.theme} onChange={e => updateSetting('theme', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></SettingRow>
+      <SettingRow label="Reciter"><select value={settings.reciter} onChange={e => updateSetting('reciter', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">{RECITERS.map(item => <option key={item.id} value={item.id}>{item.name} · {item.style}</option>)}</select></SettingRow>
+      <SettingRow label={`Playback speed · ${settings.speed}×`}><input type="range" min="0.75" max="1.5" step="0.25" value={settings.speed} onChange={e => updateSetting('speed', Number(e.target.value))} className="w-full accent-emerald-700"/></SettingRow>
+      <SettingRow label="Repeat mode"><select value={settings.repeatMode} onChange={e => updateSetting('repeatMode', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="ayah">Current ayah</option><option value="surah">Continue through Surah</option><option value="range">Ayah range</option></select></SettingRow>
+      {settings.repeatMode === 'range' && <><SettingRow label={`Range start · ${settings.rangeStart}`}><input type="range" min="1" max={surahCount} value={settings.rangeStart} onChange={e => updateSetting('rangeStart', Number(e.target.value))} className="w-full accent-emerald-700"/></SettingRow><SettingRow label={`Range end · ${settings.rangeEnd}`}><input type="range" min="1" max={surahCount} value={settings.rangeEnd} onChange={e => updateSetting('rangeEnd', Number(e.target.value))} className="w-full accent-emerald-700"/></SettingRow></>}
     </div>
+    <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => updateSetting('translationVisible', !settings.translationVisible)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold">{settings.translationVisible ? 'Hide translation' : 'Show translation'}</button><button type="button" onClick={() => updateSetting('tajweed', !settings.tajweed)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold">Tajweed {settings.tajweed ? 'on' : 'off'}</button><span className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{selectedReciter.name}</span></div>
   </section>
-}
-
-function SettingSlider({ label, value, min, max, step, onChange, suffix }) {
-  return <div><div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500"><span>{label}</span><span className="normal-case">{value}{suffix}</span></div><div className="flex items-center gap-2"><button type="button" onClick={() => onChange(Math.max(min, Number(value) - step))} className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-600" aria-label={`Decrease ${label}`}><Minus size={14}/></button><input type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(event.target.value)} className="w-full accent-emerald-600" aria-label={label}/><button type="button" onClick={() => onChange(Math.min(max, Number(value) + step))} className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-600" aria-label={`Increase ${label}`}><Plus size={14}/></button></div></div>
-}
-
-function ToggleSetting({ label, description, value, onChange, disabled = false }) {
-  return <div className={`flex items-center justify-between gap-4 rounded-xl border p-3 ${disabled ? 'opacity-55' : ''}`}><div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-[11px] text-slate-500">{description}</p></div><button type="button" disabled={disabled} role="switch" aria-checked={value} onClick={() => onChange(!value)} className={`relative h-6 w-11 shrink-0 rounded-full transition ${value ? 'bg-emerald-600' : 'bg-slate-300'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${value ? 'left-6' : 'left-1'}`}/></button></div>
-}
-
-function AyahActions({ bookmarked, memorized, onBookmark, onPlay, onCopy, onShare, onRepeat, onMemorize, onSingleAyah, isDark }) {
-  const actions = [
-    ['Bookmark', onBookmark, bookmarked ? BookmarkCheck : Bookmark],
-    ['Play / Pause', onPlay, Play],
-    ['Copy', onCopy, Copy],
-    ['Share', onShare, Share2],
-    ['Repeat', onRepeat, Repeat2],
-    ['Single Ayah', onSingleAyah, Eye],
-    [memorized ? 'Unmark memorized' : 'Memorize', onMemorize, memorized ? Check : Eye]
-  ]
-  return <div className={`absolute right-0 top-11 z-30 grid w-48 gap-1 rounded-xl border p-2 shadow-xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
-    {actions.map(([label, action, Icon]) => <button key={label} type="button" onClick={action} className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-emerald-50 hover:text-emerald-800"><Icon size={15}/>{label}</button>)}
-  </div>
-}
-
-function AudioPlayer({ currentAyah, playing, onToggle, onPrevious, onNext, audioTime, audioDuration, onSeek, repeatMode, repeatCount, repeatsDone, onRepeatMode, isDark, reciter, speed }) {
-  const repeatLabel = repeatMode === 'off' ? 'Repeat off' : repeatMode === 'range' ? 'Range' : repeatCount === Infinity ? '∞' : `${repeatCount}×`
-  return <div className={`fixed inset-x-2 bottom-2 z-50 rounded-2xl border p-2.5 shadow-2xl backdrop-blur-xl sm:inset-x-3 sm:p-3 lg:left-[292px] ${isDark ? 'border-slate-700 bg-slate-900/95' : 'border-slate-200 bg-white/95'}`}>
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-1 flex items-center justify-between gap-2 px-1 text-[11px] font-semibold text-slate-500"><span className="truncate">{reciter} · Ayah {currentAyah.numberInSurah}</span><span>{formatAudioTime(audioTime)} / {formatAudioTime(audioDuration)}</span></div>
-      <input type="range" min="0" max={audioDuration || 0} step="0.1" value={Math.min(audioTime, audioDuration || 0)} onChange={event => onSeek(Number(event.target.value))} className="w-full accent-emerald-600" aria-label="Audio progress"/>
-      <div className="mt-1 flex items-center gap-1.5 sm:gap-2">
-        <button type="button" onClick={onPrevious} className="grid h-10 w-10 shrink-0 place-items-center rounded-full" aria-label="Previous ayah"><ChevronLeft size={18}/></button>
-        <button type="button" onClick={onToggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white" aria-label={playing ? 'Pause audio' : 'Play audio'}>{playing ? <Pause size={18}/> : <Play size={18}/>}</button>
-        <button type="button" onClick={onNext} className="grid h-10 w-10 shrink-0 place-items-center rounded-full" aria-label="Next ayah"><ChevronRight size={18}/></button>
-        <button type="button" onClick={onRepeatMode} className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${repeatMode !== 'off' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-500'}`} aria-label={`Repeat mode: ${repeatLabel}`} title="Cycle repeat mode"><Repeat2 size={15}/><span className="hidden xs:inline">{repeatLabel}</span></button>
-        <div className="ml-auto hidden items-center gap-1.5 sm:flex"><Gauge size={15}/><span className="text-xs font-semibold">{speed}×</span><Volume2 size={15} className="ml-1"/></div>
-      </div>
-      {repeatsDone > 0 && <p className="mt-1 text-center text-[10px] font-semibold text-emerald-700">Repeat {repeatsDone + 1}{repeatCount === Infinity ? '' : ` / ${repeatCount}`}</p>}
-    </div>
-  </div>
 }
