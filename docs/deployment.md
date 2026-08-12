@@ -26,6 +26,7 @@ Set these values in the deployment environment and never commit real credentials
 - `CLIENT_URL`: optional browser origin when the API is accessed directly; same-origin Coolify deployments can leave this unset
 - `PORT`: keep `3000` unless Coolify is configured for another public port
 - `API_PORT`: keep `4000` unless the internal API port must change
+- `TRUST_PROXY`: set `true` when the API is behind one trusted reverse proxy, such as the Coolify proxy. Leave `false` when the API is directly exposed.
 
 ### Database migrations
 
@@ -59,3 +60,5 @@ The web container serves the SPA on port 80 and Nginx preserves client-side rout
 - Keep `DATABASE_URL`, database passwords, and admin configuration out of Git.
 - Back up PostgreSQL using encrypted provider backups.
 - Keep production migrations additive and review them before deployment.
+- Authentication endpoints are capped at 10 requests per 15-minute window per client address, and state-changing API requests are capped at 120 per minute per client address. These guards are intentionally in-memory and are a single-instance baseline; use a shared store at the edge if Tarteel is later scaled across multiple API instances.
+- If Coolify's proxy is used, enable `TRUST_PROXY=true` so request addresses are derived from the trusted proxy hop rather than collapsing all clients into the proxy address.

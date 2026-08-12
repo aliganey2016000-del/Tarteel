@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
 import { buildStreakSummary, utcDay } from './streaks.js'
 import { DEFAULT_GOAL_TARGETS, clampGoalProgress, normalizeGoalType } from './goals.js'
+import { createRateLimiter } from './rateLimit.js'
 
 const app = express()
 const prisma = new PrismaClient()
@@ -18,10 +19,14 @@ if (!tokenSecret || tokenSecret.length < 32) {
   console.warn('AUTH_SECRET is missing or shorter than 32 characters; authentication routes will reject requests until it is configured.')
 }
 
+app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : false)
 app.use(helmet())
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }))
 app.use(express.json({ limit: '64kb' }))
 app.use(morgan('dev'))
+
+const authRequestGuard = createRateLimiter({ windowMs: 15 * 60_000, max: 10 })
+const writeRequestGuard = createRateLimiter({ windowMs: 60_000, max: 120 })
 
 function normalizeEmail(email) { return String(email || '').trim().toLowerCase() }
 const validEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -31,7 +36,7 @@ const passwordHash = async (password, salt = crypto.randomBytes(16).toString('he
 }
 const verifyPassword = async (password, stored) => {
   const [salt, expected] = String(stored || '').split(':')
-  if (!salt || !expected) return false
+  if (!salt || !expected || !/^[0-9a-f]{128}$/i.test(expected)) return false
   const actual = await passwordHash(password, salt)
   const [, derived] = actual.split(':')
   return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(expected, 'hex'))
@@ -98,6 +103,12 @@ app.get('/api/health', async (_req, res) => {
   res.json({ ok: database === 'ok', service: 'tarteel-api', database, timestamp: new Date().toISOString() })
 })
 
+app.use('/api/auth', authRequestGuard)
+app.use('/api', (req, _res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return writeRequestGuard(req, _res, next)
+  next()
+})
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email)
@@ -125,6 +136,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!tokenSecret || tokenSecret.length < 32) return res.status(503).json({ error: 'Authentication is not configured' })
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' })
+    res.set('Cache-Control', 'no-store')
     res.json({ data: { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token: signToken(user.id) } })
   } catch (error) {
     console.error(error)
@@ -133,9 +145,15 @@ app.post('/api/auth/login', async (req, res) => {
 })
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, email: true, name: true, role: true, createdAt: true } })
-  if (!user) return res.status(401).json({ error: 'User account no longer exists' })
-  res.json({ data: user })
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, email: true, name: true, role: true, createdAt: true } })
+    if (!user) return res.status(401).json({ error: 'User account no longer exists' })
+    res.set('Cache-Control', 'no-store')
+    res.json({ data: user })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Account service is temporarily unavailable' })
+  }
 })
 
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (_req, res) => {
