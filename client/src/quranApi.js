@@ -4,7 +4,9 @@ const AUDIO_BITRATE = String(import.meta.env?.VITE_QURAN_AUDIO_BITRATE || '128')
 const REQUEST_TIMEOUT_MS = 15_000
 const CACHE_PREFIX = 'tarteel:quran:v2:'
 const CATALOG_KEY = `${CACHE_PREFIX}catalog`
+const SEARCH_CACHE_PREFIX = `${CACHE_PREFIX}search:`
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const SEARCH_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
 const readCache = (key) => {
   try {
@@ -18,9 +20,9 @@ const readCache = (key) => {
   }
 }
 
-const writeCache = (key, data) => {
+const writeCache = (key, data, ttlMs = CACHE_TTL_MS) => {
   try {
-    localStorage.setItem(key, JSON.stringify({ data, expiresAt: Date.now() + CACHE_TTL_MS }))
+    localStorage.setItem(key, JSON.stringify({ data, expiresAt: Date.now() + ttlMs }))
   } catch {
     // Private browsing or storage limits should never prevent reading.
   }
@@ -97,6 +99,52 @@ export async function getSurah(surahNumber, { signal } = {}) {
     }
     writeCache(key, data)
     return { ...data, source: 'network' }
+  } catch (error) {
+    if (cached?.data) return { ...cached.data, source: 'stale-cache' }
+    throw error
+  }
+}
+
+const containsArabic = value => /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/u.test(value)
+
+export const searchEditionForQuery = (query, requestedEdition = null) => {
+  if (requestedEdition) return requestedEdition
+  return containsArabic(query) ? 'quran-simple-clean' : 'en.sahih'
+}
+
+export const normalizeSearchResults = (matches = []) => matches
+  .filter(match => match?.number && match?.surah?.number && match?.numberInSurah)
+  .map(match => ({
+    ayahNumber: match.numberInSurah,
+    globalAyahNumber: match.number,
+    surahNumber: match.surah.number,
+    surahName: match.surah.englishName || match.surah.name || `Surah ${match.surah.number}`,
+    surahArabicName: match.surah.name || '',
+    text: String(match.text || '').trim()
+  }))
+
+export async function searchQuran(query, { edition = null, signal } = {}) {
+  const normalizedQuery = String(query || '').trim().replace(/\s+/g, ' ')
+  if (normalizedQuery.length < 2) throw new Error('Search must contain at least 2 characters.')
+  if (normalizedQuery.length > 80) throw new Error('Search is limited to 80 characters.')
+
+  const selectedEdition = searchEditionForQuery(normalizedQuery, edition)
+  const cacheKey = `${SEARCH_CACHE_PREFIX}${encodeURIComponent(`${selectedEdition}:${normalizedQuery.toLowerCase()}`)}`
+  const cached = readCache(cacheKey)
+  if (cached?.fresh) return cached.data
+
+  try {
+    const url = `${API_BASE}/search/${encodeURIComponent(normalizedQuery)}/all/${encodeURIComponent(selectedEdition)}`
+    const payload = await fetchJson(url, { signal })
+    if (payload?.code !== 200 || !Array.isArray(payload?.data?.matches)) throw new Error('Quran search returned an invalid response')
+    const data = {
+      query: normalizedQuery,
+      edition: selectedEdition,
+      count: Number(payload.data.count) || payload.data.matches.length,
+      matches: normalizeSearchResults(payload.data.matches)
+    }
+    writeCache(cacheKey, data, SEARCH_CACHE_TTL_MS)
+    return data
   } catch (error) {
     if (cached?.data) return { ...cached.data, source: 'stale-cache' }
     throw error

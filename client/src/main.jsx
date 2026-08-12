@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Flame } from 'lucide-react'
 import AppReader from './AppReader'
 import AdminDashboard from './AdminDashboard.jsx'
+import QuranSearch from './QuranSearch.jsx'
 import { getStreaks } from './accountApi'
 import { streakLabel, summarizeStreak } from './progressUtils.js'
 import './styles.css'
@@ -46,8 +47,10 @@ function ProgressBadge() {
 }
 
 function Root() {
-  const isAdminRoute = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+  const pathname = window.location.pathname
+  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
   if (isAdminRoute) return <AdminDashboard />
+  if (pathname === '/search' || pathname.startsWith('/search/')) return <QuranSearch />
   return <><AppReader /><ProgressBadge /></>
 }
 
