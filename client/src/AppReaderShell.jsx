@@ -12,7 +12,7 @@ const layoutStyles = `
     .tarteel-reader-shell > div > header,
     .tarteel-reader-shell > div > main,
     .tarteel-reader-shell > div > footer {
-      margin-left: 272px;
+      margin-left: 288px;
     }
 
     .tarteel-reader-shell > div > header nav,
@@ -38,18 +38,18 @@ const layoutStyles = `
 
   @media (max-width: 640px) {
     .tarteel-reader-shell > div > header > div {
-      padding-left: 4.5rem;
+      padding-left: 4.25rem;
     }
 
     .tarteel-reader-shell > div > main {
-      padding-top: 1.5rem;
+      padding-top: 1.25rem;
     }
   }
 `
 
 export default function AppReaderShell() {
   return (
-    <div className="tarteel-reader-shell">
+    <div className="tarteel-reader-shell min-h-screen bg-[#f7faf8]">
       <style>{layoutStyles}</style>
       <ReaderNavigation />
       <AppReader />
