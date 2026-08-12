@@ -65,6 +65,7 @@ const startOfDay = (value = new Date()) => {
   return date
 }
 const validGoalType = (value) => ['MEMORIZE', 'REVIEW', 'RECITE'].includes(value)
+const validSurahNumber = (value) => Number.isInteger(value) && value >= 1 && value <= 114
 
 app.get('/api/health', async (_req, res) => {
   let database = 'unknown'
@@ -168,7 +169,7 @@ app.get('/api/progress', requireAuth, async (req, res) => {
 app.put('/api/progress', requireAuth, async (req, res) => {
   const surahNumber = Number(req.body?.surahNumber)
   const ayahNumber = Number(req.body?.ayahNumber)
-  if (!Number.isInteger(surahNumber) || surahNumber < 1 || surahNumber > 114 || !Number.isInteger(ayahNumber) || ayahNumber < 1) return res.status(400).json({ error: 'Valid surahNumber and ayahNumber are required' })
+  if (!validSurahNumber(surahNumber) || !Number.isInteger(ayahNumber) || ayahNumber < 1) return res.status(400).json({ error: 'Valid surahNumber and ayahNumber are required' })
   try {
     const surah = await prisma.surah.findUnique({ where: { number: surahNumber }, select: { ayahCount: true } })
     if (!surah || ayahNumber > surah.ayahCount) return res.status(400).json({ error: 'Ayah is outside the selected Surah' })
@@ -231,6 +232,53 @@ app.patch('/api/goals/:type/progress', requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Unable to update goal progress' })
+  }
+})
+
+app.post('/api/recitations', requireAuth, async (req, res) => {
+  const surahNumber = req.body?.surahNumber === undefined || req.body?.surahNumber === null ? null : Number(req.body.surahNumber)
+  if (surahNumber !== null && !validSurahNumber(surahNumber)) return res.status(400).json({ error: 'surahNumber must be between 1 and 114' })
+  try {
+    if (surahNumber !== null) {
+      const surah = await prisma.surah.findUnique({ where: { number: surahNumber }, select: { number: true } })
+      if (!surah) return res.status(404).json({ error: 'Surah not found' })
+    }
+    const data = await prisma.recitationSession.create({ data: { userId: req.user.id, surahNumber } })
+    res.status(201).json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Unable to start recitation session' })
+  }
+})
+
+app.get('/api/recitations', requireAuth, async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query?.limit || 20), 1), 100)
+  try {
+    const data = await prisma.recitationSession.findMany({ where: { userId: req.user.id }, orderBy: { startedAt: 'desc' }, take: limit })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(503).json({ error: 'Recitation history is temporarily unavailable' })
+  }
+})
+
+app.patch('/api/recitations/:id', requireAuth, async (req, res) => {
+  const id = String(req.params.id || '')
+  const durationSec = Number(req.body?.durationSec)
+  const accuracy = req.body?.accuracy === null || req.body?.accuracy === undefined ? null : Number(req.body.accuracy)
+  const mistakes = Number(req.body?.mistakes ?? 0)
+  if (!id) return res.status(400).json({ error: 'Session id is required' })
+  if (!Number.isInteger(durationSec) || durationSec < 0 || durationSec > 24 * 60 * 60) return res.status(400).json({ error: 'durationSec must be 0–86400' })
+  if (accuracy !== null && (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100)) return res.status(400).json({ error: 'accuracy must be between 0 and 100' })
+  if (!Number.isInteger(mistakes) || mistakes < 0 || mistakes > 100000) return res.status(400).json({ error: 'mistakes must be a non-negative integer' })
+  try {
+    const existing = await prisma.recitationSession.findFirst({ where: { id, userId: req.user.id }, select: { id: true } })
+    if (!existing) return res.status(404).json({ error: 'Recitation session not found' })
+    const data = await prisma.recitationSession.update({ where: { id }, data: { durationSec, accuracy, mistakes } })
+    res.json({ data })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Unable to finish recitation session' })
   }
 })
 
