@@ -46,12 +46,10 @@ export default function SingleAyahMode({
       if (event.key === 'Escape') onExit()
       if (event.key === '+' || event.key === '=') setFontSize(value => Math.min(MAX_FONT_SIZE, value + FONT_STEP))
       if (event.key === '-' || event.key === '_') setFontSize(value => Math.max(MIN_FONT_SIZE, value - FONT_STEP))
-      if (event.key === 'ArrowLeft' && hasNext) onNext?.()
-      if (event.key === 'ArrowRight' && hasPrevious) onPrevious?.()
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [hasNext, hasPrevious, onExit, onNext, onPrevious])
+  }, [onExit])
 
   const handleTouchStart = event => {
     const touch = event.changedTouches[0]
