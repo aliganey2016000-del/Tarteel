@@ -5,6 +5,7 @@ import { Flame } from 'lucide-react'
 import AppReaderShell from './AppReaderShell.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
+import InstallPrompt from './InstallPrompt.jsx'
 import QuranSearch from './QuranSearch.jsx'
 import ProgressDashboard from './ProgressDashboard.jsx'
 import Memorize from './Memorize.jsx'
@@ -70,6 +71,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <ErrorBoundary>
         <Root />
+        <InstallPrompt />
       </ErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>
