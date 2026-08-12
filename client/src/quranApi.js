@@ -1,4 +1,7 @@
-const API_BASE = 'https://api.alquran.cloud/v1'
+const API_BASE = (import.meta.env?.VITE_QURAN_API_URL || 'https://api.alquran.cloud/v1').replace(/\/$/, '')
+const AUDIO_CDN_BASE = (import.meta.env?.VITE_QURAN_AUDIO_CDN_URL || 'https://cdn.islamic.network').replace(/\/$/, '')
+const AUDIO_BITRATE = String(import.meta.env?.VITE_QURAN_AUDIO_BITRATE || '128')
+const REQUEST_TIMEOUT_MS = 15_000
 const CACHE_PREFIX = 'tarteel:quran:v2:'
 const CATALOG_KEY = `${CACHE_PREFIX}catalog`
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -23,22 +26,38 @@ const writeCache = (key, data) => {
   }
 }
 
+const fetchJson = async (url, { signal } = {}) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const onAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+  }
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
+    if (!response.ok) throw new Error(`Quran provider returned ${response.status}`)
+    return response.json()
+  } finally {
+    clearTimeout(timeout)
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
 const fetchEdition = async (surahNumber, edition, signal) => {
-  const response = await fetch(`${API_BASE}/surah/${surahNumber}/${edition}`, { signal, headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`Quran provider returned ${response.status}`)
-  const payload = await response.json()
+  const payload = await fetchJson(`${API_BASE}/surah/${surahNumber}/${edition}`, { signal })
   if (payload?.code !== 200 || !payload?.data) throw new Error('Quran provider returned an invalid response')
   return payload.data
 }
+
+export const audioUrlForAyah = (ayahNumber, apiAudioUrl = null) => apiAudioUrl || `${AUDIO_CDN_BASE}/quran/audio/${AUDIO_BITRATE}/ar.alafasy/${ayahNumber}.mp3`
 
 export async function listSurahs({ signal } = {}) {
   const cached = readCache(CATALOG_KEY)
   if (cached?.fresh) return cached.data
 
   try {
-    const response = await fetch(`${API_BASE}/surah`, { signal, headers: { Accept: 'application/json' } })
-    if (!response.ok) throw new Error(`Quran catalog returned ${response.status}`)
-    const payload = await response.json()
+    const payload = await fetchJson(`${API_BASE}/surah`, { signal })
     if (payload?.code !== 200 || !Array.isArray(payload?.data)) throw new Error('Quran catalog returned an invalid response')
     writeCache(CATALOG_KEY, payload.data)
     return payload.data
@@ -73,7 +92,7 @@ export async function getSurah(surahNumber, { signal } = {}) {
         juz: ayah.juz,
         textArabic: ayah.text,
         translation: translation.ayahs[index]?.text || '',
-        audioUrl: audioByAyah.get(ayah.numberInSurah) || null
+        audioUrl: audioUrlForAyah(ayah.number, audioByAyah.get(ayah.numberInSurah))
       }))
     }
     writeCache(key, data)
