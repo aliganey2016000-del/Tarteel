@@ -29,6 +29,14 @@ const fetchEdition = async (surahNumber, edition, signal) => {
   return payload.data
 }
 
+export async function listSurahs({ signal } = {}) {
+  const response = await fetch(`${API_BASE}/surah`, { signal, headers: { Accept: 'application/json' } })
+  if (!response.ok) throw new Error(`Quran catalog returned ${response.status}`)
+  const payload = await response.json()
+  if (payload?.code !== 200 || !Array.isArray(payload?.data)) throw new Error('Quran catalog returned an invalid response')
+  return payload.data
+}
+
 export async function getSurah(surahNumber, { signal } = {}) {
   const cached = readCache(surahNumber)
   if (cached) return { ...cached, source: 'cache' }
