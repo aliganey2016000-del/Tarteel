@@ -12,7 +12,11 @@ async function request(path, options = {}) {
   })
   if (response.status === 204) return null
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`)
+  if (!response.ok) {
+    const retryAfter = response.headers.get('Retry-After')
+    const suffix = response.status === 429 && retryAfter ? ` Try again in ${retryAfter}s.` : ''
+    throw new Error(`${payload.error || `Request failed (${response.status})`}${suffix}`)
+  }
   return payload.data
 }
 
@@ -25,3 +29,5 @@ export const removeBookmark = (token, ayahId) => request(`/bookmarks/${ayahId}`,
 export const saveProgress = (token, surahNumber, ayahNumber) => request('/progress', { method: 'PUT', token, body: JSON.stringify({ surahNumber, ayahNumber }) })
 export const getProgress = (token) => request('/progress', { token })
 export const getStreaks = (token) => request('/streaks', { token })
+export const getGoals = (token, date) => request(`/goals${date ? `?date=${encodeURIComponent(date)}` : ''}`, { token })
+export const updateGoal = (token, type, target, completed, date) => request(`/goals/${encodeURIComponent(type)}`, { method: 'PUT', token, body: JSON.stringify({ target, completed, ...(date ? { date } : {}) }) })
