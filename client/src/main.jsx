@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Flame } from 'lucide-react'
 import AppReader from './AppReader'
+import AdminDashboard from './AdminDashboard.jsx'
 import { getStreaks } from './accountApi'
 import { streakLabel, summarizeStreak } from './progressUtils.js'
 import './styles.css'
@@ -44,11 +45,16 @@ function ProgressBadge() {
   </div>
 }
 
+function Root() {
+  const isAdminRoute = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+  if (isAdminRoute) return <AdminDashboard />
+  return <><AppReader /><ProgressBadge /></>
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AppReader />
-      <ProgressBadge />
+      <Root />
     </BrowserRouter>
   </React.StrictMode>
 )
