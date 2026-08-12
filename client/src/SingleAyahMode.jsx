@@ -109,7 +109,7 @@ export default function SingleAyahMode({
 }) {
   const fallbackSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Number(arabicSize) || 48))
   const [fontSize, setFontSize] = useState(() => readSavedFontSize(fallbackSize))
-  const [controlsVisible, setControlsVisible] = useState(true)
+  const [controlsVisible, setControlsVisible] = useState(false)
   const [showTranslation, setShowTranslation] = useState(false)
   const [showSize, setShowSize] = useState(false)
   const [showAudio, setShowAudio] = useState(false)
@@ -130,6 +130,11 @@ export default function SingleAyahMode({
   useEffect(() => {
     setShowTranslation(false)
     setPageIndex(0)
+    setControlsVisible(false)
+    setShowSize(false)
+    setShowAudio(false)
+    if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current)
+    idleTimerRef.current = null
   }, [ayah?.numberInSurah, surah?.number])
 
   const clearIdleTimer = () => {
@@ -146,11 +151,6 @@ export default function SingleAyahMode({
       setShowAudio(false)
     }, IDLE_MS)
   }
-
-  useEffect(() => {
-    revealControls()
-    return clearIdleTimer
-  }, [ayah?.numberInSurah])
 
   // Measure the real viewport rather than guessing from device type. This keeps
   // portrait/landscape, browser chrome, split-screen and desktop windows correct.
@@ -475,7 +475,7 @@ export default function SingleAyahMode({
       {pages.length > 1 && <div className={`mt-1 text-center text-[10px] font-semibold tabular-nums ${muted}`} aria-live="polite">Reading part {pageIndex + 1} / {pages.length}</div>}
     </div>
 
-    <div className={`pointer-events-none absolute left-1/2 top-[max(4.6rem,env(safe-area-inset-top)+4rem)] -translate-x-1/2 rounded-full border px-3 py-1 text-[10px] font-semibold backdrop-blur-xl transition-opacity duration-300 ${isDark ? 'border-white/10 bg-white/5 text-slate-300' : 'border-slate-200 bg-white/70 text-slate-500'} ${playing ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`pointer-events-none absolute left-1/2 top-[max(4.6rem,env(safe-area-inset-top)+4rem)] -translate-x-1/2 rounded-full border px-3 py-1 text-[10px] font-semibold backdrop-blur-xl transition-opacity duration-300 ${isDark ? 'border-white/10 bg-white/5 text-slate-300' : 'border-slate-200 bg-white/70 text-slate-500'} ${playing && controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
       {reciter} · {speed || 1}×
     </div>
   </main>
