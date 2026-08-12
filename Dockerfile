@@ -16,7 +16,7 @@ ENV API_PORT=4000
 COPY server/package.json ./server/
 RUN cd server && npm install
 COPY prisma ./prisma
-RUN cd server && npx prisma generate --schema=/app/prisma/schema.prisma && npm prune --omit=dev
+RUN cd server && npx prisma generate --schema=/app/prisma/schema.prisma
 COPY server/src ./server/src
 COPY --from=client-build /app/client/dist ./client/dist
 
