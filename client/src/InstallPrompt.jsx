@@ -1,20 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Download, X } from 'lucide-react'
-
-const DISMISS_KEY = 'tarteel:pwa-install-dismissed:v1'
-
-const isStandalone = () => {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
-}
-
-const readDismissed = () => {
-  try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false }
-}
-
-const saveDismissed = () => {
-  try { localStorage.setItem(DISMISS_KEY, '1') } catch {}
-}
+import { isStandalone, readDismissed, saveDismissed } from './installPromptUtils.js'
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
@@ -80,5 +66,3 @@ export default function InstallPrompt() {
     </div>
   </aside>
 }
-
-export { isStandalone, readDismissed, saveDismissed }
