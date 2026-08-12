@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:22-alpine AS client-build
 WORKDIR /app/client
 
@@ -16,9 +18,13 @@ ENV API_PORT=4000
 COPY server/package.json ./server/
 RUN cd server && npm install
 COPY prisma ./prisma
-RUN cd server && npx prisma generate --schema=/app/prisma/schema.prisma
+RUN cd server && npx prisma generate --schema=/app/prisma/schema.prisma && npm prune --omit=dev
 COPY server/src ./server/src
 COPY --from=client-build /app/client/dist ./client/dist
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
 CMD ["node", "server/src/production.js"]
