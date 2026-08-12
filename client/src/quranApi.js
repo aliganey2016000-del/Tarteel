@@ -2,11 +2,24 @@ const API_BASE = (import.meta.env?.VITE_QURAN_API_URL || 'https://api.alquran.cl
 const AUDIO_CDN_BASE = (import.meta.env?.VITE_QURAN_AUDIO_CDN_URL || 'https://cdn.islamic.network').replace(/\/$/, '')
 const AUDIO_BITRATE = String(import.meta.env?.VITE_QURAN_AUDIO_BITRATE || '128')
 const REQUEST_TIMEOUT_MS = 15_000
-const CACHE_PREFIX = 'tarteel:quran:v2:'
+const CACHE_PREFIX = 'tarteel:quran:v3:'
 const CATALOG_KEY = `${CACHE_PREFIX}catalog`
 const SEARCH_CACHE_PREFIX = `${CACHE_PREFIX}search:`
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const SEARCH_CACHE_TTL_MS = 6 * 60 * 60 * 1000
+
+export const RECITERS = [
+  { id: 'ar.alafasy', name: 'Mishary Alafasy', style: 'Murattal' },
+  { id: 'ar.husary', name: 'Mahmoud Al-Husary', style: 'Murattal' },
+  { id: 'ar.minshawi', name: 'Mohamed Al-Minshawi', style: 'Murattal' },
+  { id: 'ar.sudais', name: 'Abdul Rahman Al-Sudais', style: 'Murattal' },
+  { id: 'ar.shuraim', name: 'Saud Al-Shuraim', style: 'Murattal' },
+  { id: 'ar.abdulbasit', name: 'Abdul Basit Abdul Samad', style: 'Murattal' },
+  { id: 'ar.ajamy', name: 'Ahmed Al-Ajamy', style: 'Murattal' },
+  { id: 'ar.hudhaify', name: 'Ali Al-Hudhaify', style: 'Murattal' }
+]
+
+const DEFAULT_RECITER = RECITERS[0].id
 
 const readCache = (key) => {
   try {
@@ -52,7 +65,8 @@ const fetchEdition = async (surahNumber, edition, signal) => {
   return payload.data
 }
 
-export const audioUrlForAyah = (ayahNumber, apiAudioUrl = null) => apiAudioUrl || `${AUDIO_CDN_BASE}/quran/audio/${AUDIO_BITRATE}/ar.alafasy/${ayahNumber}.mp3`
+export const audioUrlForAyah = (ayahNumber, apiAudioUrl = null, reciter = DEFAULT_RECITER) =>
+  apiAudioUrl || `${AUDIO_CDN_BASE}/quran/audio/${AUDIO_BITRATE}/${reciter}/${ayahNumber}.mp3`
 
 export async function listSurahs({ signal } = {}) {
   const cached = readCache(CATALOG_KEY)
@@ -69,16 +83,23 @@ export async function listSurahs({ signal } = {}) {
   }
 }
 
-export async function getSurah(surahNumber, { signal } = {}) {
-  const key = `${CACHE_PREFIX}${surahNumber}`
+export async function getSurah(surahNumber, { signal, reciter = DEFAULT_RECITER } = {}) {
+  const selectedReciter = RECITERS.some(item => item.id === reciter) ? reciter : DEFAULT_RECITER
+  const key = `${CACHE_PREFIX}${surahNumber}:${selectedReciter}`
   const cached = readCache(key)
+  const legacyCached = selectedReciter === DEFAULT_RECITER ? readCache(`tarteel:quran:v2:${surahNumber}`) : null
   if (cached?.fresh) return { ...cached.data, source: 'cache' }
+  if (legacyCached?.fresh) {
+    const migrated = { ...legacyCached.data, reciter: selectedReciter, ayahs: legacyCached.data.ayahs.map(ayah => ({ ...ayah, audioUrl: audioUrlForAyah(ayah.number, null, selectedReciter) })) }
+    writeCache(key, migrated)
+    return { ...migrated, source: 'cache' }
+  }
 
   try {
     const [arabic, translation, audio] = await Promise.all([
       fetchEdition(surahNumber, 'quran-uthmani', signal),
       fetchEdition(surahNumber, 'en.sahih', signal),
-      fetchEdition(surahNumber, 'ar.alafasy', signal)
+      fetchEdition(surahNumber, selectedReciter, signal)
     ])
     const audioByAyah = new Map(audio.ayahs.map((ayah) => [ayah.numberInSurah, ayah.audio || null]))
     const data = {
@@ -88,19 +109,21 @@ export async function getSurah(surahNumber, { signal } = {}) {
       translationName: arabic.englishNameTranslation,
       revelationType: arabic.revelationType,
       ayahCount: arabic.numberOfAyahs,
+      reciter: selectedReciter,
       ayahs: arabic.ayahs.map((ayah, index) => ({
         number: ayah.number,
         numberInSurah: ayah.numberInSurah,
         juz: ayah.juz,
         textArabic: ayah.text,
         translation: translation.ayahs[index]?.text || '',
-        audioUrl: audioUrlForAyah(ayah.number, audioByAyah.get(ayah.numberInSurah))
+        audioUrl: audioUrlForAyah(ayah.number, audioByAyah.get(ayah.numberInSurah), selectedReciter)
       }))
     }
     writeCache(key, data)
     return { ...data, source: 'network' }
   } catch (error) {
     if (cached?.data) return { ...cached.data, source: 'stale-cache' }
+    if (legacyCached?.data && selectedReciter === DEFAULT_RECITER) return { ...legacyCached.data, source: 'stale-cache' }
     throw error
   }
 }
@@ -153,7 +176,7 @@ export async function searchQuran(query, { edition = null, signal } = {}) {
 
 export function clearQuranCache() {
   try {
-    Object.keys(localStorage).filter((key) => key.startsWith(CACHE_PREFIX)).forEach((key) => localStorage.removeItem(key))
+    Object.keys(localStorage).filter((key) => key.startsWith(CACHE_PREFIX) || key.startsWith('tarteel:quran:v2:')).forEach((key) => localStorage.removeItem(key))
   } catch {
     // Ignore storage failures.
   }
