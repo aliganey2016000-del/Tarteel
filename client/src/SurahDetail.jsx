@@ -5,6 +5,7 @@ import {
   Share2, Sun, Moon, Volume2, X
 } from 'lucide-react'
 import ReaderNavigation from './ReaderNavigation.jsx'
+import SingleAyahMode from './SingleAyahMode.jsx'
 import { getSurah, RECITERS } from './quranApi'
 import {
   REPEAT_COUNTS, clampNumber, formatAudioTime, nextAyahNumber,
@@ -35,15 +36,15 @@ const DEFAULT_SETTINGS = {
   rangeEnd: 1
 }
 
-const loadState = () => {
+const getState = () => {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { return {} }
 }
 const saveState = value => {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(value)) } catch {}
 }
-const getInitialSettings = () => ({ ...DEFAULT_SETTINGS, ...(loadState().settings || {}) })
-const getInitialBookmarks = () => loadState().bookmarks || {}
-const getInitialMemorized = () => loadState().memorized || {}
+const getInitialSettings = () => ({ ...DEFAULT_SETTINGS, ...(getState().settings || {}) })
+const getInitialBookmarks = () => getState().bookmarks || {}
+const getInitialMemorized = () => getState().memorized || {}
 
 const FONT_OPTIONS = [
   { value: 'uthmani', label: 'Uthmani', family: 'Amiri, Noto Naskh Arabic, serif' },
@@ -71,7 +72,7 @@ export default function SurahDetail() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState(initialSettings)
   const [playing, setPlaying] = useState(false)
-  const [activeAyah, setActiveAyah] = useState(() => Number(loadState()[surahNumber]) || 1)
+  const [activeAyah, setActiveAyah] = useState(() => Number(getState()[surahNumber]) || 1)
   const [bookmarks, setBookmarks] = useState(getInitialBookmarks)
   const [memorized, setMemorized] = useState(getInitialMemorized)
   const [actionOpen, setActionOpen] = useState(null)
@@ -104,9 +105,7 @@ export default function SurahDetail() {
     return () => media.removeEventListener?.('change', listener)
   }, [])
 
-  useEffect(() => {
-    saveState({ ...loadState(), settings })
-  }, [settings])
+  useEffect(() => { saveState({ ...getState(), settings }) }, [settings])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -165,9 +164,7 @@ export default function SurahDetail() {
   const rangeEnd = clampNumber(Math.max(settings.rangeEnd, rangeStart), 1, surah?.ayahCount || 1)
   const selectedReciter = RECITERS.find(item => item.id === settings.reciter) || RECITERS[0]
 
-  const persistPosition = number => {
-    saveState({ ...loadState(), [surahNumber]: number, bookmarks, settings, memorized })
-  }
+  const persistPosition = number => saveState({ ...getState(), [surahNumber]: number, bookmarks, settings, memorized })
 
   const setAyah = number => {
     const next = clampNumber(number, 1, surah?.ayahCount || 1)
@@ -272,7 +269,7 @@ export default function SurahDetail() {
     else next[surahNumber] = { ...existing, [ayahNumber]: { timestamp: new Date().toISOString(), readingPosition: ayahNumber } }
     if (next[surahNumber] && Object.keys(next[surahNumber]).length === 0) delete next[surahNumber]
     setBookmarks(next)
-    saveState({ ...loadState(), bookmarks: next, [surahNumber]: activeAyah, settings, memorized })
+    saveState({ ...getState(), bookmarks: next, [surahNumber]: activeAyah, settings, memorized })
   }
 
   const toggleMemorized = ayahNumber => {
@@ -280,7 +277,7 @@ export default function SurahDetail() {
     if (next[surahNumber][ayahNumber]) delete next[surahNumber][ayahNumber]
     else next[surahNumber][ayahNumber] = { markedAt: new Date().toISOString() }
     setMemorized(next)
-    saveState({ ...loadState(), memorized: next, bookmarks, settings, [surahNumber]: activeAyah })
+    saveState({ ...getState(), memorized: next, bookmarks, settings, [surahNumber]: activeAyah })
   }
 
   const copyAyah = async ayah => {
@@ -317,14 +314,40 @@ export default function SurahDetail() {
     if (ayah) playAyah(ayah)
   }
 
+  if (settings.focusMode && surah && currentAyah) {
+    const font = FONT_OPTIONS.find(item => item.value === settings.arabicFont) || FONT_OPTIONS[0]
+    return <SingleAyahMode
+      surah={surah}
+      ayah={currentAyah}
+      playing={playing}
+      onPlay={() => toggleAudio(currentAyah)}
+      onPrevious={playerPrevious}
+      onNext={playerNext}
+      onExit={() => updateSetting('focusMode', false)}
+      translationVisible={settings.translationVisible}
+      translationSize={settings.translationSize}
+      arabicSize={settings.arabicSize}
+      arabicFontFamily={font.family}
+      lineSpacing={settings.lineSpacing}
+      isDark={isDark}
+      reciter={selectedReciter.name}
+      speed={settings.speed}
+      onOpenSettings={() => setSettingsOpen(true)}
+      onMarkMemorized={() => toggleMemorized(currentAyah.numberInSurah)}
+      memorized={Boolean(memorized[surahNumber]?.[currentAyah.numberInSurah])}
+      hasPrevious={activeAyah > 1}
+      hasNext={activeAyah < surah.ayahCount}
+    />
+  }
+
   return <div className={`min-h-screen transition-colors ${readingSurface}`}>
     {!settings.focusMode && <ReaderNavigation />}
-    <main className={settings.focusMode ? '' : 'min-h-screen lg:ml-[272px]'}>
-      <div className={`mx-auto max-w-5xl px-4 py-5 pb-28 sm:px-6 ${settings.focusMode ? 'lg:max-w-4xl lg:py-8' : 'lg:py-8'}`}>
+    <main className="min-h-screen lg:ml-[272px]">
+      <div className="mx-auto max-w-5xl px-4 py-5 pb-28 sm:px-6 lg:py-8">
         <div className="flex items-center justify-between gap-3">
           <a href="/" className={`inline-flex items-center gap-2 rounded-xl px-2 py-2 text-sm font-semibold ${mutedText} hover:bg-white/70`}><ArrowLeft size={17}/> Back to Index</a>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => updateSetting('focusMode', !settings.focusMode)} className={`rounded-xl px-3 py-2 text-xs font-semibold ${isDark ? 'bg-slate-900 text-slate-200' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}>{settings.focusMode ? 'Exit Focus' : 'Focus'}</button>
+            <button type="button" onClick={() => updateSetting('focusMode', true)} className={`rounded-xl px-3 py-2 text-xs font-semibold ${isDark ? 'bg-slate-900 text-slate-200' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}>Single Ayah</button>
             <button type="button" onClick={() => setSettingsOpen(value => !value)} aria-expanded={settingsOpen} aria-controls="reader-settings" aria-label="Open reader controls" className={`grid h-10 w-10 place-items-center rounded-xl ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}><Settings2 size={18}/></button>
           </div>
         </div>
@@ -366,7 +389,7 @@ export default function SurahDetail() {
                     <button type="button" onClick={() => toggleBookmark(ayah.numberInSurah)} aria-label={bookmarked ? `Remove bookmark from ayah ${ayah.numberInSurah}` : `Bookmark ayah ${ayah.numberInSurah}`} className={`grid h-9 w-9 place-items-center rounded-lg ${bookmarked ? 'bg-amber-50 text-amber-600' : mutedText}`} title={bookmarked ? 'Bookmarked' : 'Bookmark'}>{bookmarked ? <BookmarkCheck size={17}/> : <Bookmark size={17}/>}</button>
                     <button type="button" onClick={() => toggleAudio(ayah)} aria-label={`${playing && isActive ? 'Pause' : 'Play'} ayah ${ayah.numberInSurah}`} className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">{playing && isActive ? <Pause size={16}/> : <Play size={16}/>}</button>
                     <button type="button" onClick={() => setActionOpen(value => value === ayah.numberInSurah ? null : ayah.numberInSurah)} aria-label={`More actions for ayah ${ayah.numberInSurah}`} aria-expanded={actionOpen === ayah.numberInSurah} className={`grid h-9 w-9 place-items-center rounded-lg ${isDark ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'}`}><MoreVertical size={17}/></button>
-                    {actionOpen === ayah.numberInSurah && <AyahActions ayah={ayah} bookmarked={bookmarked} memorized={markedMemorized} onBookmark={() => toggleBookmark(ayah.numberInSurah)} onPlay={() => toggleAudio(ayah)} onCopy={() => copyAyah(ayah)} onShare={() => shareAyah(ayah)} onRepeat={() => { updateSetting('repeatMode', 'ayah'); setRepeatCount(repeatCount === 1 ? 3 : repeatCount === 3 ? 5 : repeatCount === 5 ? Infinity : 1); playAyah(ayah) }} onMemorize={() => toggleMemorized(ayah.numberInSurah)} isDark={isDark}/>} 
+                    {actionOpen === ayah.numberInSurah && <AyahActions ayah={ayah} bookmarked={bookmarked} memorized={markedMemorized} onBookmark={() => toggleBookmark(ayah.numberInSurah)} onPlay={() => toggleAudio(ayah)} onCopy={() => copyAyah(ayah)} onShare={() => shareAyah(ayah)} onRepeat={() => { updateSetting('repeatMode', 'ayah'); setRepeatCount(repeatCount === 1 ? 3 : repeatCount === 3 ? 5 : repeatCount === 5 ? Infinity : 1); playAyah(ayah) }} onMemorize={() => toggleMemorized(ayah.numberInSurah)} onSingleAyah={() => { setAyah(ayah.numberInSurah); updateSetting('focusMode', true); setActionOpen(null) }} isDark={isDark}/>} 
                   </div>
                 </div>
                 <button type="button" onClick={() => setAyah(ayah.numberInSurah)} className="mt-5 block w-full text-right" aria-label={`Read ayah ${ayah.numberInSurah}`}>
@@ -426,13 +449,14 @@ function ToggleSetting({ label, description, value, onChange, disabled = false }
   return <div className={`flex items-center justify-between gap-4 rounded-xl border p-3 ${disabled ? 'opacity-55' : ''}`}><div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-[11px] text-slate-500">{description}</p></div><button type="button" disabled={disabled} role="switch" aria-checked={value} onClick={() => onChange(!value)} className={`relative h-6 w-11 shrink-0 rounded-full transition ${value ? 'bg-emerald-600' : 'bg-slate-300'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${value ? 'left-6' : 'left-1'}`}/></button></div>
 }
 
-function AyahActions({ bookmarked, memorized, onBookmark, onPlay, onCopy, onShare, onRepeat, onMemorize, isDark }) {
+function AyahActions({ bookmarked, memorized, onBookmark, onPlay, onCopy, onShare, onRepeat, onMemorize, onSingleAyah, isDark }) {
   const actions = [
     ['Bookmark', onBookmark, bookmarked ? BookmarkCheck : Bookmark],
     ['Play / Pause', onPlay, Play],
     ['Copy', onCopy, Copy],
     ['Share', onShare, Share2],
     ['Repeat', onRepeat, Repeat2],
+    ['Single Ayah', onSingleAyah, Eye],
     [memorized ? 'Unmark memorized' : 'Memorize', onMemorize, memorized ? Check : Eye]
   ]
   return <div className={`absolute right-0 top-11 z-30 grid w-48 gap-1 rounded-xl border p-2 shadow-xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
@@ -451,7 +475,7 @@ function AudioPlayer({ currentAyah, playing, onToggle, onPrevious, onNext, audio
         <button type="button" onClick={onToggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white" aria-label={playing ? 'Pause audio' : 'Play audio'}>{playing ? <Pause size={18}/> : <Play size={18}/>}</button>
         <button type="button" onClick={onNext} className="grid h-10 w-10 shrink-0 place-items-center rounded-full" aria-label="Next ayah"><ChevronRight size={18}/></button>
         <button type="button" onClick={onRepeatMode} className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${repeatMode !== 'off' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-500'}`} aria-label={`Repeat mode: ${repeatLabel}`} title="Cycle repeat mode"><Repeat2 size={15}/><span className="hidden xs:inline">{repeatLabel}</span></button>
-        <div className="ml-auto hidden items-center gap-1.5 sm:flex"><Gauge size={15}/><select value={speed} onChange={() => {}} disabled className="rounded-lg border border-slate-200 bg-transparent px-1.5 py-1 text-xs" aria-label="Playback speed"><option>{speed}×</option></select><Volume2 size={15} className="ml-1"/></div>
+        <div className="ml-auto hidden items-center gap-1.5 sm:flex"><Gauge size={15}/><span className="text-xs font-semibold">{speed}×</span><Volume2 size={15} className="ml-1"/></div>
       </div>
       {repeatsDone > 0 && <p className="mt-1 text-center text-[10px] font-semibold text-emerald-700">Repeat {repeatsDone + 1}{repeatCount === Infinity ? '' : ` / ${repeatCount}`}</p>}
     </div>
