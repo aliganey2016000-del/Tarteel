@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Flame } from 'lucide-react'
-import AppReader from './AppReader'
+import AppReaderShell from './AppReaderShell.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
 import QuranSearch from './QuranSearch.jsx'
 import ProgressDashboard from './ProgressDashboard.jsx'
@@ -53,7 +53,7 @@ function Root() {
   if (isAdminRoute) return <AdminDashboard />
   if (pathname === '/search' || pathname.startsWith('/search/')) return <QuranSearch />
   if (pathname === '/progress' || pathname.startsWith('/progress/')) return <ProgressDashboard />
-  return <><AppReader /><ProgressBadge /></>
+  return <><AppReaderShell /><ProgressBadge /></>
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
