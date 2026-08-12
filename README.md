@@ -62,20 +62,26 @@ The authorization middleware re-checks the database role on every admin request,
 
 ## Production deployment
 
-### Coolify / Nixpacks
+### Coolify / Dockerfile — recommended
 
-The repository includes `nixpacks.toml` for the monorepo. The production entrypoint is `server/src/production.js`: it serves the built React app on port `3000` and proxies `/api` requests to the Express API on port `4000`.
+The repository includes a production `Dockerfile` that builds the Vite client, generates the Prisma client, prunes server dev dependencies, serves the combined application on port `3000`, and exposes `/api/health` for container health checks. This path avoids the extra Nixpacks/nixpkgs bootstrap dependency.
 
 For a Coolify application using this repository:
 
-1. Use **Nixpacks** as the build pack.
-2. Set the application port to **3000**.
-3. Keep the build/start commands from `nixpacks.toml`; the start command must be `node server/src/production.js`.
+1. Set **Build Pack** to **Dockerfile**.
+2. Keep the Dockerfile path as `/Dockerfile` and the base directory as `/`.
+3. Set the application port to **3000**.
 4. Configure `DATABASE_URL` for PostgreSQL and `AUTH_SECRET` with at least 32 random characters.
 5. Optionally set `ADMIN_EMAILS` to a comma-separated list of administrator email addresses.
 6. Deploy from `main` and verify `GET /api/health` returns `ok: true` when the database is reachable.
 
-Do not expose port `4000` publicly when using the combined production entrypoint; the frontend server proxies API traffic internally.
+The Docker image intentionally runs both the web server and API behind port `3000`; do not expose port `4000` publicly. The web server proxies `/api` internally to the API process.
+
+### Coolify / Nixpacks
+
+`nixpacks.toml` remains available for environments that require Nixpacks. It installs the monorepo dependencies, builds the client, generates Prisma, and starts `server/src/production.js`.
+
+If a Coolify Nixpacks deployment fails during `nix-env` while fetching a `nixpkgs` archive, that failure is in the Nixpacks bootstrap/network layer before the application is compiled. In that case, switch the Coolify Build Pack to **Dockerfile** and redeploy rather than changing application code to compensate for the failed Nixpkgs fetch.
 
 ### Docker Compose
 
