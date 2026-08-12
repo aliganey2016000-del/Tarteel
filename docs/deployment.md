@@ -1,28 +1,61 @@
 # Production deployment
 
-Tarteel includes a Docker Compose production stack with PostgreSQL, the Express API, and the Vite-built React SPA.
+Tarteel supports both a Docker Compose deployment and a single-container deployment suitable for a simple Coolify application.
 
-## Required environment
+## Single-container deployment (Coolify)
 
-Set these values in the deployment environment and do not commit them:
+The repository root `Dockerfile` builds the React/Vite client, installs the Express/Prisma server, generates the Prisma client, and starts both services behind one public HTTP port. The web process listens on port `3000` and proxies `/api/*` to the internal Express API on port `4000`.
 
-- POSTGRES_PASSWORD: strong database password
-- AUTH_SECRET: random secret of at least 32 characters
-- ADMIN_EMAILS: optional comma-separated admin email allowlist
-- CLIENT_URL: public browser origin
-- POSTGRES_DB / POSTGRES_USER: optional database names
+In Coolify, create an Application from the public `Tarteel` repository and use:
 
-## Start
+- Branch: `main`
+- Build Pack: `Dockerfile`
+- Dockerfile Location: `/Dockerfile`
+- Port: `3000`
+- Base Directory: `/`
 
-Run the production Compose stack with the environment variables configured by your deployment platform. The API image is built from `server/Dockerfile` and the web image from `client/Dockerfile`.
+The application needs a PostgreSQL database reachable through `DATABASE_URL`.
 
-After the database is healthy, run Prisma's production migration command inside the API container: `npx prisma migrate deploy`.
+### Environment variables
 
-The API exposes `/api/health` for service/database health checks. The web container serves the SPA on port 80 and Nginx preserves client-side routes.
+Set these values in the deployment environment and never commit real credentials:
+
+- `DATABASE_URL`: PostgreSQL connection string used by Prisma
+- `AUTH_SECRET`: random secret of at least 32 characters
+- `ADMIN_EMAILS`: optional comma-separated admin email allowlist
+- `CLIENT_URL`: optional browser origin when the API is accessed directly; same-origin Coolify deployments can leave this unset
+- `PORT`: keep `3000` unless Coolify is configured for another public port
+- `API_PORT`: keep `4000` unless the internal API port must change
+
+### Database migrations
+
+Before the first production start, and on every release that introduces a Prisma migration, run:
+
+```bash
+cd server && npx prisma migrate deploy --schema=../prisma/schema.prisma
+```
+
+In Coolify this can be configured as a pre-deployment command. The command must run with `DATABASE_URL` available.
+
+The API exposes `/api/health`, which reports both application and PostgreSQL health and is suitable for a container health check.
+
+## Docker Compose deployment
+
+The existing `docker-compose.prod.yml` provides a separate PostgreSQL, Express API, and Vite/Nginx web stack. The API image is built from `server/Dockerfile` and the web image from `client/Dockerfile`.
+
+After the database is healthy, run Prisma's production migration command inside the API container:
+
+```bash
+npx prisma migrate deploy
+```
+
+The web container serves the SPA on port 80 and Nginx preserves client-side routes.
 
 ## Security notes
 
-- Terminate TLS at a reverse proxy or load balancer.
-- Restrict the API port from the public internet when it is routed through a proxy.
-- Use a unique production AUTH_SECRET; never reuse development credentials.
+- Terminate TLS at Coolify's proxy or another trusted reverse proxy.
+- Do not expose the internal API port `4000` publicly when using the single-container runtime.
+- Use a unique production `AUTH_SECRET`; never reuse development credentials.
+- Keep `DATABASE_URL`, database passwords, and admin configuration out of Git.
 - Back up PostgreSQL using encrypted provider backups.
+- Keep production migrations additive and review them before deployment.
