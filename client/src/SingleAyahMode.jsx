@@ -1,9 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 
 const MIN_FONT_SIZE = 28
 const MAX_FONT_SIZE = 96
 const FONT_STEP = 4
+const FONT_STORAGE_KEY = 'tarteel:single-ayah-font-size:v1'
+const SWIPE_THRESHOLD = 60
+
+function readSavedFontSize(fallback) {
+  try {
+    const saved = Number(localStorage.getItem(FONT_STORAGE_KEY))
+    return Number.isFinite(saved) ? Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, saved)) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function saveFontSize(value) {
+  try { localStorage.setItem(FONT_STORAGE_KEY, String(value)) } catch {}
+}
 
 export default function SingleAyahMode({
   ayah,
@@ -11,13 +26,19 @@ export default function SingleAyahMode({
   arabicFontFamily,
   lineSpacing,
   isDark,
-  onExit
+  onExit,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext
 }) {
-  const [fontSize, setFontSize] = useState(() => Number(arabicSize) || 48)
+  const fallbackSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Number(arabicSize) || 48))
+  const [fontSize, setFontSize] = useState(() => readSavedFontSize(fallbackSize))
+  const touchStartRef = useRef(null)
 
   useEffect(() => {
-    setFontSize(Number(arabicSize) || 48)
-  }, [ayah.numberInSurah, arabicSize])
+    saveFontSize(fontSize)
+  }, [fontSize])
 
   useEffect(() => {
     const handleKey = event => {
@@ -25,10 +46,34 @@ export default function SingleAyahMode({
       if (event.key === 'Escape') onExit()
       if (event.key === '+' || event.key === '=') setFontSize(value => Math.min(MAX_FONT_SIZE, value + FONT_STEP))
       if (event.key === '-' || event.key === '_') setFontSize(value => Math.max(MIN_FONT_SIZE, value - FONT_STEP))
+      if (event.key === 'ArrowLeft' && hasNext) onNext?.()
+      if (event.key === 'ArrowRight' && hasPrevious) onPrevious?.()
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [onExit])
+  }, [hasNext, hasPrevious, onExit, onNext, onPrevious])
+
+  const handleTouchStart = event => {
+    const touch = event.changedTouches[0]
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  const handleTouchEnd = event => {
+    const start = touchStartRef.current
+    touchStartRef.current = null
+    if (!start) return
+
+    const touch = event.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) <= Math.abs(dy)) return
+
+    if (dx < 0 && hasNext) onNext?.()
+    if (dx > 0 && hasPrevious) onPrevious?.()
+  }
+
+  const decreaseFont = () => setFontSize(value => Math.max(MIN_FONT_SIZE, value - FONT_STEP))
+  const increaseFont = () => setFontSize(value => Math.min(MAX_FONT_SIZE, value + FONT_STEP))
 
   const surface = isDark ? 'bg-slate-950 text-slate-100' : 'bg-[#fdfefd] text-slate-950'
   const controlSurface = isDark
@@ -40,6 +85,8 @@ export default function SingleAyahMode({
     role="dialog"
     aria-modal="true"
     aria-label="Single Ayah reading mode"
+    onTouchStart={handleTouchStart}
+    onTouchEnd={handleTouchEnd}
   >
     <p
       dir="rtl"
@@ -59,11 +106,13 @@ export default function SingleAyahMode({
       className="fixed bottom-5 right-5 z-10 flex items-center gap-1 rounded-2xl border p-1 shadow-lg backdrop-blur-xl"
       role="group"
       aria-label="Ayah text size"
+      onTouchStart={event => event.stopPropagation()}
+      onTouchEnd={event => event.stopPropagation()}
       onClick={event => event.stopPropagation()}
     >
       <button
         type="button"
-        onClick={() => setFontSize(value => Math.max(MIN_FONT_SIZE, value - FONT_STEP))}
+        onClick={decreaseFont}
         disabled={fontSize <= MIN_FONT_SIZE}
         aria-label="Decrease Arabic text size"
         title="Decrease text size"
@@ -76,7 +125,7 @@ export default function SingleAyahMode({
       </span>
       <button
         type="button"
-        onClick={() => setFontSize(value => Math.min(MAX_FONT_SIZE, value + FONT_STEP))}
+        onClick={increaseFont}
         disabled={fontSize >= MAX_FONT_SIZE}
         aria-label="Increase Arabic text size"
         title="Increase text size"
@@ -86,6 +135,8 @@ export default function SingleAyahMode({
       </button>
     </div>
 
-    <span className="sr-only">Press Escape to exit. Use plus and minus keys to change text size.</span>
+    <span className="sr-only">
+      Swipe left for the next ayah and right for the previous ayah. Press Escape to exit. Use plus and minus keys to change text size.
+    </span>
   </main>
 }
