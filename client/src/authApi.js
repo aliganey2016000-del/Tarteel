@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
+const API_BASE = (import.meta.env?.VITE_API_URL || '/api').replace(/\/$/, '')
 const TOKEN_KEY = 'tarteel_token'
 
 const request = async (path, options = {}) => {
@@ -21,11 +21,15 @@ export const getToken = () => {
 }
 
 export const setToken = token => {
-  if (!token) return clearToken()
-  localStorage.setItem(TOKEN_KEY, token)
+  try {
+    if (!token) return clearToken()
+    localStorage.setItem(TOKEN_KEY, token)
+  } catch {}
 }
 
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY)
+export const clearToken = () => {
+  try { localStorage.removeItem(TOKEN_KEY) } catch {}
+}
 
 export const getCurrentUser = () => request('/auth/me')
 
