@@ -41,3 +41,26 @@ test('request cap keeps separate keys independent', () => {
   guard({}, response(), () => { calls += 1 })
   assert.equal(calls, 2)
 })
+
+test('request cap bounds the number of active client buckets', () => {
+  let key = 'one'
+  const guard = createRateLimiter({ windowMs: 60_000, max: 1, maxKeys: 2, keyGenerator: () => key })
+  guard({}, response(), () => {})
+  key = 'two'
+  guard({}, response(), () => {})
+  key = 'three'
+  guard({}, response(), () => {})
+
+  // The first key was evicted when the bounded store filled. It can start
+  // a fresh window rather than retaining attacker-controlled state forever.
+  key = 'one'
+  const recovered = response()
+  guard({}, recovered, () => {})
+  assert.equal(recovered.statusCode, 200)
+})
+
+test('invalid limiter configuration is rejected early', () => {
+  assert.throws(() => createRateLimiter({ windowMs: 0, max: 1 }), /windowMs/)
+  assert.throws(() => createRateLimiter({ windowMs: 1, max: 0 }), /max must/)
+  assert.throws(() => createRateLimiter({ windowMs: 1, max: 1, maxKeys: 0 }), /maxKeys/)
+})
