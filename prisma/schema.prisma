@@ -12,6 +12,7 @@ model User {
   email        String       @unique
   name         String?
   passwordHash String
+  role         UserRole     @default(USER)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   bookmarks    Bookmark[]
@@ -88,4 +89,9 @@ enum GoalType {
   MEMORIZE
   REVIEW
   RECITE
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
