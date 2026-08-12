@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Flame, Target, Trophy } from 'lucide-react'
 import { getGoals, getStreaks, updateGoal } from './accountApi'
 import { streakLabel, summarizeStreak } from './progressUtils.js'
+import RecitationPanel from './RecitationPanel.jsx'
 
 const TOKEN_KEY = 'tarteel:auth-token'
 const GOAL_META = {
@@ -74,6 +75,9 @@ export default function ProgressDashboard() {
       {error && <div role="alert" className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
       {loading ? <div className="mt-7 grid gap-4 md:grid-cols-3">{[1,2,3].map(item => <div key={item} className="h-52 animate-pulse rounded-2xl bg-slate-200"/>)}</div> : <>
         <section className="mt-7 grid gap-4 md:grid-cols-3">{goals.map(goal => <GoalCard key={goal.id || goal.type} goal={goal} onChange={saved => setGoals(current => current.map(item => item.type === saved.type ? saved : item))}/>)}</section>
+        <section className="mt-6">
+          <RecitationPanel />
+        </section>
         <section className="mt-6 grid gap-4 md:grid-cols-2">
           <article className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700"><Trophy size={18}/></span><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Best streak</p><h2 className="text-xl font-bold">{streakLabel(streak?.longest || 0)}</h2></div></div><p className="mt-3 text-sm leading-6 text-slate-500">Keep the habit alive by completing at least one learning activity each day.</p></article>
           <article className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Active days</p><h2 className="text-xl font-bold">{streak?.totalActiveDays ?? 0}</h2></div><Flame className="text-emerald-700"/></div><div className="mt-4 flex flex-wrap gap-1.5" aria-label="Recent active days">{(streak?.recentActivity || []).slice(0, 30).map(day => <span key={day} title={day} className="h-3 w-3 rounded-sm bg-emerald-500"/> )}</div></article>
