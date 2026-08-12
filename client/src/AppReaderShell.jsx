@@ -1,5 +1,6 @@
 import AppReader from './AppReader.jsx'
 import ReaderNavigation from './ReaderNavigation.jsx'
+import NetworkStatus from './NetworkStatus.jsx'
 
 const layoutStyles = `
   .tarteel-reader-shell > div > header,
@@ -53,6 +54,7 @@ export default function AppReaderShell() {
       <style>{layoutStyles}</style>
       <ReaderNavigation />
       <AppReader />
+      <NetworkStatus />
     </div>
   )
 }
