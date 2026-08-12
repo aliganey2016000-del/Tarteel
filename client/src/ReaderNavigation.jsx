@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Menu, Search, Settings2, X, Sparkles } from 'lucide-react'
+import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Flame, Menu, Search, Settings2, Sparkles, X } from 'lucide-react'
 
 const sections = [
   { title: 'Learn', items: [
@@ -19,7 +19,7 @@ const sections = [
 
 function NavItem({ item, active, onNavigate }) {
   const Icon = item.icon
-  return <a href={item.href} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 transition ${active ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+  return <a href={item.href} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 transition duration-200 ${active ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100' : 'text-slate-600 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900'}`}>
     {active && <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-emerald-700" aria-hidden="true" />}
     <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition ${active ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/15' : 'bg-slate-100 text-slate-500 group-hover:bg-white group-hover:shadow-sm'}`}><Icon size={19} strokeWidth={active ? 2.3 : 2} aria-hidden="true" /></span>
     <span className="min-w-0"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-xs text-slate-400">{item.description}</span></span>
@@ -28,14 +28,17 @@ function NavItem({ item, active, onNavigate }) {
 
 export default function ReaderNavigation() {
   const [open, setOpen] = useState(false)
+  const [lastRead, setLastRead] = useState(() => Number(localStorage.getItem('tarteel:last-surah') || 1))
   const pathname = window.location.pathname
   const close = () => setOpen(false)
   const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   useEffect(() => {
     const onKeyDown = event => { if (event.key === 'Escape') close() }
+    const onStorage = () => setLastRead(Number(localStorage.getItem('tarteel:last-surah') || 1))
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('storage', onStorage)
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onStorage) }
   }, [])
   useEffect(() => { document.body.classList.toggle('overflow-hidden', open); return () => document.body.classList.remove('overflow-hidden') }, [open])
 
@@ -50,9 +53,10 @@ export default function ReaderNavigation() {
       </div>
 
       <div className="px-3 pt-3">
-        <a href="/" onClick={close} className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-3 text-emerald-900 hover:bg-emerald-50">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-white text-emerald-700 shadow-sm"><Sparkles size={17}/></span>
-          <span className="min-w-0"><span className="block text-xs font-bold uppercase tracking-wide text-emerald-700">Quick start</span><span className="block truncate text-sm font-semibold">Continue your reading</span></span>
+        <a href={`/surah/${lastRead}`} onClick={close} className="group flex items-center gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white px-3 py-3.5 text-emerald-900 shadow-sm hover:-translate-y-0.5 hover:shadow-md">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100"><Sparkles size={17}/></span>
+          <span className="min-w-0 flex-1"><span className="block text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-700">Quick start</span><span className="mt-0.5 block truncate text-sm font-bold">Continue Surah {lastRead}</span></span>
+          <span className="text-xs font-bold text-emerald-600 transition group-hover:translate-x-0.5">Open</span>
         </a>
       </div>
 
@@ -61,8 +65,8 @@ export default function ReaderNavigation() {
       </nav>
 
       <div className="border-t border-slate-100 p-3">
-        <a href="/settings" onClick={close} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span className="min-w-0"><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a>
-        <div className="mt-2 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100"><p className="text-xs font-semibold text-slate-700">Read with focus</p><p className="mt-1 text-[11px] leading-5 text-slate-500">Use Single Ayah mode whenever you want a calm, distraction-free session.</p></div>
+        <a href="/settings" onClick={close} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 transition hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span className="min-w-0"><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a>
+        <div className="mt-2 flex items-center gap-3 rounded-2xl bg-slate-950/[0.035] p-3 ring-1 ring-slate-100"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-emerald-700 shadow-sm"><Flame size={16}/></span><div><p className="text-xs font-bold text-slate-700">Build a daily habit</p><p className="mt-0.5 text-[11px] leading-5 text-slate-500">A few focused ayahs every day.</p></div></div>
       </div>
     </aside>
   </>
