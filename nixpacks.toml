@@ -1,0 +1,19 @@
+# Coolify/Nixpacks build plan for the Tarteel monorepo.
+# The root package delegates the frontend build to ./client, so Nixpacks
+# must install dependencies for the nested client and server packages too.
+
+[phases.install]
+cmds = [
+  "npm install --include=dev",
+  "npm --prefix client install --include=dev",
+  "npm --prefix server install --include=dev"
+]
+
+[phases.build]
+cmds = [
+  "npm run build",
+  "npm --prefix server run prisma:generate"
+]
+
+[start]
+cmd = "npm --prefix server start"
