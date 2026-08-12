@@ -69,6 +69,7 @@ model Goal {
   completed  Int      @default(0)
   date       DateTime
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, type, date])
   @@index([userId, date])
 }
 
