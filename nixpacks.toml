@@ -15,5 +15,7 @@ cmds = [
   "npm --prefix server run prisma:generate"
 ]
 
+# Coolify is configured to expose port 3000. The production entrypoint
+# serves the built frontend on 3000 and proxies /api to the API on 4000.
 [start]
-cmd = "npm --prefix server start"
+cmd = "node server/src/production.js"
