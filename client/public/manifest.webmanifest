@@ -1,0 +1,14 @@
+{
+  "name": "Tarteel — Quran Learning",
+  "short_name": "Tarteel",
+  "description": "A calm, modern Quran reading, memorization and recitation companion.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7faf8",
+  "theme_color": "#08785d",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["education", "lifestyle"]
+}
