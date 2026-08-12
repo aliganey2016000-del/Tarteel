@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
+const API_BASE = (import.meta.env?.VITE_API_URL || '/api').replace(/\/$/, '')
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -23,4 +23,5 @@ export const listBookmarks = (token) => request('/bookmarks', { token })
 export const saveBookmark = (token, ayahId) => request(`/bookmarks/${ayahId}`, { method: 'PUT', token })
 export const removeBookmark = (token, ayahId) => request(`/bookmarks/${ayahId}`, { method: 'DELETE', token })
 export const saveProgress = (token, surahNumber, ayahNumber) => request('/progress', { method: 'PUT', token, body: JSON.stringify({ surahNumber, ayahNumber }) })
+export const getProgress = (token) => request('/progress', { token })
 export const getStreaks = (token) => request('/streaks', { token })
