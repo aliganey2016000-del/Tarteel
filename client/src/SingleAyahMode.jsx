@@ -51,43 +51,44 @@ export default function SingleAyahMode({
   const fallbackSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Number(arabicSize) || 48))
   const [fontSize, setFontSize] = useState(() => readSavedFontSize(fallbackSize))
   const touchStartRef = useRef(null)
-  const fullscreenAttemptedRef = useRef(false)
+  const onExitRef = useRef(onExit)
+
+  useEffect(() => {
+    onExitRef.current = onExit
+  }, [onExit])
 
   useEffect(() => {
     saveFontSize(fontSize)
   }, [fontSize])
 
   useEffect(() => {
-    // Best effort: some browsers require fullscreen to be requested directly
-    // from a user gesture. The pointer handler below retries on the first tap.
-    fullscreenAttemptedRef.current = true
+    // Try immediately, then retry from the first user gesture when the browser
+    // requires transient user activation for fullscreen.
     requestReaderFullscreen()
 
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && fullscreenAttemptedRef.current) {
-        onExit?.()
-      }
+      if (!document.fullscreenElement) onExitRef.current?.()
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
       exitReaderFullscreen()
     }
-  }, [onExit])
+  }, [])
 
   useEffect(() => {
     const handleKey = event => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return
       if (event.key === 'Escape') {
         event.preventDefault()
-        onExit()
+        onExitRef.current?.()
       }
       if (event.key === '+' || event.key === '=') setFontSize(value => Math.min(MAX_FONT_SIZE, value + FONT_STEP))
       if (event.key === '-' || event.key === '_') setFontSize(value => Math.max(MIN_FONT_SIZE, value - FONT_STEP))
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [onExit])
+  }, [])
 
   const handleTouchStart = event => {
     if (!document.fullscreenElement) requestReaderFullscreen()
@@ -125,10 +126,7 @@ export default function SingleAyahMode({
     onTouchStart={handleTouchStart}
     onTouchEnd={handleTouchEnd}
     onPointerDown={() => {
-      if (!document.fullscreenElement && !fullscreenAttemptedRef.current) {
-        fullscreenAttemptedRef.current = true
-        requestReaderFullscreen()
-      }
+      if (!document.fullscreenElement) requestReaderFullscreen()
     }}
   >
     <p
