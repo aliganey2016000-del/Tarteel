@@ -38,6 +38,7 @@ async function exitReaderFullscreen() {
 
 export default function SingleAyahMode({
   ayah,
+  playing,
   arabicSize,
   arabicFontFamily,
   lineSpacing,
@@ -52,6 +53,7 @@ export default function SingleAyahMode({
   const [fontSize, setFontSize] = useState(() => readSavedFontSize(fallbackSize))
   const touchStartRef = useRef(null)
   const onExitRef = useRef(onExit)
+  const wakeLockRef = useRef(null)
 
   useEffect(() => {
     onExitRef.current = onExit
@@ -60,6 +62,50 @@ export default function SingleAyahMode({
   useEffect(() => {
     saveFontSize(fontSize)
   }, [fontSize])
+
+  useEffect(() => {
+    // Keep the reading screen awake while a recitation is playing. This is
+    // especially useful for long memorization sessions on mobile devices.
+    let cancelled = false
+
+    const releaseWakeLock = async () => {
+      const lock = wakeLockRef.current
+      wakeLockRef.current = null
+      if (lock) {
+        try { await lock.release() } catch {}
+      }
+    }
+
+    const requestWakeLock = async () => {
+      if (!playing || cancelled || !('wakeLock' in navigator)) return
+      try {
+        const lock = await navigator.wakeLock.request('screen')
+        if (cancelled) {
+          try { await lock.release() } catch {}
+          return
+        }
+        wakeLockRef.current = lock
+        lock.addEventListener?.('release', () => {
+          if (!cancelled && playing && document.visibilityState === 'visible') {
+            requestWakeLock()
+          }
+        })
+      } catch {}
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && playing) requestWakeLock()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    requestWakeLock()
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', handleVisibility)
+      releaseWakeLock()
+    }
+  }, [playing])
 
   useEffect(() => {
     // Try immediately, then retry from the first user gesture when the browser
@@ -178,7 +224,7 @@ export default function SingleAyahMode({
     </div>
 
     <span className="sr-only">
-      Single Ayah mode shows only the Quran ayah. Swipe left for the next ayah and right for the previous ayah. Press Escape to exit. Use plus and minus keys to change text size.
+      Single Ayah mode shows only the Quran ayah. Swipe left for the next ayah and right for the previous ayah. Press Escape to exit. Use plus and minus keys to change text size. The screen stays awake during recitation when supported by the browser.
     </span>
   </main>
 }
