@@ -1,8 +1,22 @@
 const now = () => Date.now()
 
-export const createRateLimiter = ({ windowMs, max, keyGenerator = request => request.ip || 'unknown' }) => {
+/**
+ * Small fixed-window limiter for the single-process API.
+ *
+ * The bucket store is deliberately bounded so an attacker cannot exhaust
+ * process memory by presenting a large number of distinct client keys.
+ * For multi-instance deployments, use a shared edge/proxy limiter as the
+ * authoritative global control; this limiter remains a local safety net.
+ */
+export const createRateLimiter = ({
+  windowMs,
+  max,
+  keyGenerator = request => request.ip || 'unknown',
+  maxKeys = 10_000
+}) => {
   if (!Number.isInteger(windowMs) || windowMs <= 0) throw new Error('windowMs must be a positive integer')
   if (!Number.isInteger(max) || max <= 0) throw new Error('max must be a positive integer')
+  if (!Number.isInteger(maxKeys) || maxKeys <= 0) throw new Error('maxKeys must be a positive integer')
 
   const buckets = new Map()
   let lastCleanup = 0
@@ -15,13 +29,27 @@ export const createRateLimiter = ({ windowMs, max, keyGenerator = request => req
     }
   }
 
+  const evictIfFull = () => {
+    while (buckets.size >= maxKeys) {
+      const oldest = buckets.keys().next().value
+      if (oldest === undefined) break
+      buckets.delete(oldest)
+    }
+  }
+
   return (req, res, next) => {
     const timestamp = now()
     cleanup(timestamp)
-    const key = String(keyGenerator(req) || 'unknown')
-    let bucket = buckets.get(key)
+    let key
+    try {
+      key = String(keyGenerator(req) || 'unknown').slice(0, 256)
+    } catch {
+      key = 'unknown'
+    }
 
+    let bucket = buckets.get(key)
     if (!bucket || bucket.resetAt <= timestamp) {
+      if (!bucket) evictIfFull()
       bucket = { count: 0, resetAt: timestamp + windowMs }
       buckets.set(key, bucket)
     }
