@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Keyboard, Menu, Search, Settings2, Wifi, WifiOff, X } from 'lucide-react'
+import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Keyboard, Menu, Search, Settings2, Target, X } from 'lucide-react'
 
 const sections = [
   { title: 'Learn', items: [
@@ -12,77 +12,17 @@ const sections = [
     { label: 'Daily Review', href: '/review', icon: CheckCircle2, description: "Today's muraja'ah queue" },
     { label: 'Weak Ayahs', href: '/weak-ayahs', icon: CircleAlert, description: 'Passages that need repetition' },
   ] },
-  { title: 'Progress', items: [
+  { title: 'My Plan', items: [
+    { label: 'Personal Plan', href: '/plan', icon: Target, description: 'A routine matched to your goals' },
     { label: 'Progress', href: '/progress', icon: BarChart3, description: 'Goals, streaks and activity' },
   ] },
 ]
 
-function readLastRead() {
-  try {
-    const raw = JSON.parse(localStorage.getItem('tarteel:surah-detail:v3') || '{}')
-    const number = Number(raw?.lastRead?.surahNumber ?? raw?.currentSurah ?? raw?.surahNumber)
-    const ayah = Number(raw?.lastRead?.ayahNumber ?? raw?.currentAyah ?? raw?.ayahNumber ?? 1)
-    if (!Number.isInteger(number) || number < 1 || number > 114) return null
-    return { surahNumber: number, ayahNumber: Number.isInteger(ayah) && ayah > 0 ? ayah : 1 }
-  } catch { return null }
-}
-
-function NavItem({ item, active, onNavigate }) {
-  const Icon = item.icon
-  return <a href={item.href} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`group flex items-center gap-3 rounded-2xl px-3 py-3 transition ${active ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${active ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-white'}`}><Icon size={19} aria-hidden="true" /></span>
-    <span className="min-w-0"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-xs text-slate-400">{item.description}</span></span>
-  </a>
-}
+function readLastRead() { try { const raw = JSON.parse(localStorage.getItem('tarteel:surah-detail:v3') || '{}'); const number = Number(raw?.lastRead?.surahNumber ?? raw?.currentSurah ?? raw?.surahNumber); const ayah = Number(raw?.lastRead?.ayahNumber ?? raw?.currentAyah ?? raw?.ayahNumber ?? 1); if (!Number.isInteger(number) || number < 1 || number > 114) return null; return { surahNumber: number, ayahNumber: Number.isInteger(ayah) && ayah > 0 ? ayah : 1 } } catch { return null } }
+function NavItem({ item, active, onNavigate }) { const Icon = item.icon; return <a href={item.href} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`group flex items-center gap-3 rounded-2xl px-3 py-3 transition ${active ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${active ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-white'}`}><Icon size={19} aria-hidden="true" /></span><span className="min-w-0"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-xs text-slate-400">{item.description}</span></span></a> }
 
 export default function ReaderNavigation() {
-  const [open, setOpen] = useState(false)
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [lastRead, setLastRead] = useState(readLastRead)
-  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
-  const pathname = window.location.pathname
-  const close = () => setOpen(false)
-  const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
-
-  useEffect(() => {
-    const onKeyDown = event => {
-      const target = event.target
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return
-      if (event.key === 'Escape') { close(); setShortcutsOpen(false) }
-      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); setShortcutsOpen(true) }
-    }
-    const onReaderState = () => setLastRead(readLastRead())
-    const onOnline = () => setOnline(true)
-    const onOffline = () => setOnline(false)
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('storage', onReaderState)
-    window.addEventListener('tarteel:reader-position', onReaderState)
-    window.addEventListener('online', onOnline)
-    window.addEventListener('offline', onOffline)
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onReaderState); window.removeEventListener('tarteel:reader-position', onReaderState); window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) }
-  }, [])
+  const [open, setOpen] = useState(false); const [shortcutsOpen, setShortcutsOpen] = useState(false); const [lastRead, setLastRead] = useState(readLastRead); const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine); const pathname = window.location.pathname; const close = () => setOpen(false); const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
+  useEffect(() => { const onKeyDown = event => { const target = event.target; if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return; if (event.key === 'Escape') { close(); setShortcutsOpen(false) }; if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); setShortcutsOpen(true) } }; const onReaderState = () => setLastRead(readLastRead); const onOnline = () => setOnline(true); const onOffline = () => setOnline(false); window.addEventListener('keydown', onKeyDown); window.addEventListener('storage', onReaderState); window.addEventListener('tarteel:reader-position', onReaderState); window.addEventListener('online', onOnline); window.addEventListener('offline', onOffline); return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onReaderState); window.removeEventListener('tarteel:reader-position', onReaderState); window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) } }, [])
   useEffect(() => { document.body.classList.toggle('overflow-hidden', open); return () => document.body.classList.remove('overflow-hidden') }, [open])
-
-  return <>
-    <button type="button" onClick={() => setOpen(value => !value)} aria-label={open ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={open} aria-controls="tarteel-reader-navigation" className="fixed left-3 top-3 z-[70] grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white/95 text-slate-700 shadow-lg backdrop-blur lg:hidden">{open ? <X size={20}/> : <Menu size={20}/>}</button>
-    {open && <button type="button" aria-label="Close navigation overlay" onClick={close} className="fixed inset-0 z-[55] bg-slate-950/35 backdrop-blur-[2px] lg:hidden" />}
-    <aside id="tarteel-reader-navigation" aria-label="Primary navigation" className={`fixed inset-y-0 left-0 z-[60] flex w-[min(86vw,310px)] flex-col border-r border-slate-200 bg-white shadow-2xl transition-transform duration-200 lg:w-[272px] lg:translate-x-0 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-5">
-        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-700 text-white"><BookOpen size={20}/></span>
-        <div><p className="text-lg font-bold tracking-tight text-slate-900">Tarteel</p><p className="text-[11px] font-medium text-slate-400">Quran learning</p></div>
-        <button type="button" onClick={close} aria-label="Close navigation" className="ml-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-50 lg:hidden"><X size={18}/></button>
-      </div>
-      {lastRead && <a href={`/surah/${lastRead.surahNumber}#ayah-${lastRead.ayahNumber}`} onClick={close} className="mx-3 mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 hover:bg-emerald-100/70"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">Quick start</p><p className="mt-1 truncate text-sm font-bold text-emerald-950">Continue reading</p><p className="mt-0.5 text-xs text-emerald-700">Surah {lastRead.surahNumber} · Ayah {lastRead.ayahNumber}</p></a>}
-      <nav className="flex-1 overflow-y-auto p-3" aria-label="Learning sections">
-        {sections.map(section => <section key={section.title} className="mb-4 last:mb-0"><p className="px-3 pb-2 pt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{section.title}</p><div className="space-y-1">{section.items.map(item => <NavItem key={item.label} item={item} active={isActive(item)} onNavigate={close}/>)}</div></section>)}
-      </nav>
-      <div className="border-t border-slate-100 p-4 space-y-2">
-        <div role="status" aria-live="polite" className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${online ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />{online ? 'Online · sync available' : 'Offline · saved reading still works'}</div>
-        <a href="/settings" onClick={close} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a>
-        <button type="button" onClick={() => setShortcutsOpen(true)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-slate-600 hover:bg-slate-50"><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-xs font-bold"><Keyboard size={17}/></span><span><span className="block text-sm font-semibold">Keyboard shortcuts</span><span className="text-xs text-slate-400">Press ? anytime</span></span></button>
-        <div className="rounded-2xl bg-emerald-50 p-3"><p className="text-xs font-semibold text-emerald-800">Read with focus</p><p className="mt-1 text-[11px] leading-5 text-emerald-700/80">Keep the menu simple, then open the reader in Single Ayah mode when you want zero distractions.</p></div>
-      </div>
-    </aside>
-    {shortcutsOpen && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" onMouseDown={event => { if (event.target === event.currentTarget) setShortcutsOpen(false) }}><div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 id="shortcut-title" className="text-lg font-bold">Keyboard shortcuts</h2><p className="mt-1 text-sm text-slate-500">Move through the reader without leaving the keyboard.</p></div><button onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts" className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100"><X size={17}/></button></div><div className="mt-5 space-y-2">{[['← / →','Previous / next ayah'],['Space','Play / pause audio'],['?','Open this guide'],['Esc','Close menus']].map(([key, label]) => <div key={key} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5"><span className="text-sm text-slate-600">{label}</span><kbd className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700">{key}</kbd></div>)}</div></div></div>}
-  </>
-}
+  return <><button type="button" onClick={() => setOpen(value => !value)} aria-label={open ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={open} aria-controls="tarteel-reader-navigation" className="fixed left-3 top-3 z-[70] grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white/95 text-slate-700 shadow-lg backdrop-blur lg:hidden">{open ? <X size={20}/> : <Menu size={20}/>}</button>{open && <button type="button" aria-label="Close navigation overlay" onClick={close} className="fixed inset-0 z-[55] bg-slate-950/35 backdrop-blur-[2px] lg:hidden" />}<aside id="tarteel-reader-navigation" aria-label="Primary navigation" className={`fixed inset-y-0 left-0 z-[60] flex w-[min(86vw,310px)] flex-col border-r border-slate-200 bg-white shadow-2xl transition-transform duration-200 lg:w-[272px] lg:translate-x-0 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}><div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-5"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-700 text-white"><BookOpen size={20}/></span><div><p className="text-lg font-bold tracking-tight text-slate-900">Tarteel</p><p className="text-[11px] font-medium text-slate-400">Quran learning</p></div><button type="button" onClick={close} aria-label="Close navigation" className="ml-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-50 lg:hidden"><X size={18}/></button></div>{lastRead && <a href={`/surah/${lastRead.surahNumber}#ayah-${lastRead.ayahNumber}`} onClick={close} className="mx-3 mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 hover:bg-emerald-100/70"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">Quick start</p><p className="mt-1 truncate text-sm font-bold text-emerald-950">Continue reading</p><p className="mt-0.5 text-xs text-emerald-700">Surah {lastRead.surahNumber} · Ayah {lastRead.ayahNumber}</p></a>}<nav className="flex-1 overflow-y-auto p-3" aria-label="Learning sections">{sections.map(section => <section key={section.title} className="mb-4 last:mb-0"><p className="px-3 pb-2 pt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{section.title}</p><div className="space-y-1">{section.items.map(item => <NavItem key={item.label} item={item} active={isActive(item)} onNavigate={close}/>)}</div></section>)}</nav><div className="border-t border-slate-100 p-4 space-y-2"><div role="status" aria-live="polite" className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${online ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />{online ? 'Online · sync available' : 'Offline · saved reading still works'}</div><a href="/settings" onClick={close} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a><button type="button" onClick={() => setShortcutsOpen(true)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-slate-600 hover:bg-slate-50"><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-xs font-bold"><Keyboard size={17}/></span><span><span className="block text-sm font-semibold">Keyboard shortcuts</span><span className="text-xs text-slate-400">Press ? anytime</span></span></button><div className="rounded-2xl bg-emerald-50 p-3"><p className="text-xs font-semibold text-emerald-800">Read with focus</p><p className="mt-1 text-[11px] leading-5 text-emerald-700/80">Keep the menu simple, then open the reader in Single Ayah mode when you want zero distractions.</p></div></div></aside>{shortcutsOpen && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" onMouseDown={event => { if (event.target === event.currentTarget) setShortcutsOpen(false) }}><div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 id="shortcut-title" className="text-lg font-bold">Keyboard shortcuts</h2><p className="mt-1 text-sm text-slate-500">Move through the reader without leaving the keyboard.</p></div><button onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts" className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100"><X size={17}/></button></div><div className="mt-5 space-y-2">{[['← / →','Previous / next ayah'],['Space','Play / pause audio'],['?','Open this guide'],['Esc','Close menus']].map(([key, label]) => <div key={key} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5"><span className="text-sm text-slate-600">{label}</span><kbd className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700">{key}</kbd></div>)}</div></div></div>}</>
