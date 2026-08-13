@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Flame, Keyboard, Menu, Search, Settings2, Sparkles, X } from 'lucide-react'
+import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Flame, Keyboard, Menu, Search, Settings2, Sparkles, Wifi, WifiOff, X } from 'lucide-react'
 
 const sections = [
   { title: 'Learn', items: [
@@ -41,9 +41,10 @@ export default function ReaderNavigation() {
   const [open, setOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [lastRead, setLastRead] = useState(readLastRead)
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
   const pathname = window.location.pathname
   const close = () => setOpen(false)
-  const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
+  const isActive = item => item.href === '/' ? pathname === '/' || /^\\/surah\\/\\d+\\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   useEffect(() => {
     const onKeyDown = event => {
@@ -53,10 +54,14 @@ export default function ReaderNavigation() {
       if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); setShortcutsOpen(true) }
     }
     const onStorage = () => setLastRead(readLastRead())
+    const onOnline = () => setOnline(true)
+    const onOffline = () => setOnline(false)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('storage', onStorage)
     window.addEventListener('tarteel:reader-position', onStorage)
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onStorage); window.removeEventListener('tarteel:reader-position', onStorage) }
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onStorage); window.removeEventListener('tarteel:reader-position', onStorage); window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) }
   }, [])
   useEffect(() => { document.body.classList.toggle('overflow-hidden', open || shortcutsOpen); return () => document.body.classList.remove('overflow-hidden') }, [open, shortcutsOpen])
 
@@ -83,6 +88,10 @@ export default function ReaderNavigation() {
       </nav>
 
       <div className="border-t border-slate-100 p-3">
+        <div className={`mb-2 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-xs font-semibold ${online ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`} role="status" aria-live="polite">
+          {online ? <Wifi size={15} aria-hidden="true"/> : <WifiOff size={15} aria-hidden="true"/>}
+          <span>{online ? 'Online · sync available' : 'Offline · saved reading still works'}</span>
+        </div>
         <div className="flex items-center gap-2">
           <a href="/settings" onClick={close} className={`flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 transition hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span className="min-w-0"><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a>
           <button type="button" onClick={() => setShortcutsOpen(true)} aria-label="Show keyboard shortcuts" className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:text-emerald-700"><Keyboard size={19}/></button>
