@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Flame, Menu, Search, Settings2, Sparkles, X } from 'lucide-react'
+import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Flame, Keyboard, Menu, Search, Settings2, Sparkles, X } from 'lucide-react'
 
 const sections = [
   { title: 'Learn', items: [
@@ -39,20 +39,26 @@ function NavItem({ item, active, onNavigate }) {
 
 export default function ReaderNavigation() {
   const [open, setOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [lastRead, setLastRead] = useState(readLastRead)
   const pathname = window.location.pathname
   const close = () => setOpen(false)
   const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   useEffect(() => {
-    const onKeyDown = event => { if (event.key === 'Escape') close() }
+    const onKeyDown = event => {
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return
+      if (event.key === 'Escape') { close(); setShortcutsOpen(false) }
+      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); setShortcutsOpen(true) }
+    }
     const onStorage = () => setLastRead(readLastRead())
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('storage', onStorage)
     window.addEventListener('tarteel:reader-position', onStorage)
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onStorage); window.removeEventListener('tarteel:reader-position', onStorage) }
   }, [])
-  useEffect(() => { document.body.classList.toggle('overflow-hidden', open); return () => document.body.classList.remove('overflow-hidden') }, [open])
+  useEffect(() => { document.body.classList.toggle('overflow-hidden', open || shortcutsOpen); return () => document.body.classList.remove('overflow-hidden') }, [open, shortcutsOpen])
 
   return <>
     <button type="button" onClick={() => setOpen(value => !value)} aria-label={open ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={open} aria-controls="tarteel-reader-navigation" className="safe-top fixed left-3 top-0 z-[70] grid h-14 w-11 place-items-center text-slate-700 lg:hidden"><span className="grid h-10 w-10 place-items-center rounded-2xl border border-slate-200/80 bg-white/95 shadow-lg shadow-slate-900/5 backdrop-blur">{open ? <X size={20}/> : <Menu size={20}/>}</span></button>
@@ -77,9 +83,24 @@ export default function ReaderNavigation() {
       </nav>
 
       <div className="border-t border-slate-100 p-3">
-        <a href="/settings" onClick={close} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 transition hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span className="min-w-0"><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a>
+        <div className="flex items-center gap-2">
+          <a href="/settings" onClick={close} className={`flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-3 text-slate-600 transition hover:bg-slate-50 ${isActive({ href: '/settings' }) ? 'bg-slate-50 text-emerald-800' : ''}`}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100"><Settings2 size={19}/></span><span className="min-w-0"><span className="block text-sm font-semibold">Settings</span><span className="text-xs text-slate-400">Reader preferences</span></span></a>
+          <button type="button" onClick={() => setShortcutsOpen(true)} aria-label="Show keyboard shortcuts" className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:text-emerald-700"><Keyboard size={19}/></button>
+        </div>
         <div className="mt-2 flex items-center gap-3 rounded-2xl bg-slate-950/[0.035] p-3 ring-1 ring-slate-100"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-emerald-700 shadow-sm"><Flame size={16}/></span><div><p className="text-xs font-bold text-slate-700">Build a daily habit</p><p className="mt-0.5 text-[11px] leading-5 text-slate-500">A few focused ayahs every day.</p></div></div>
       </div>
     </aside>
+
+    {shortcutsOpen && <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setShortcutsOpen(false) }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="tarteel-shortcuts-title" className="w-full max-w-md rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Keyboard</p><h2 id="tarteel-shortcuts-title" className="mt-1 text-xl font-bold text-slate-900">Reader shortcuts</h2></div><button type="button" onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts" className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-500"><X size={17}/></button></div>
+        <div className="mt-5 space-y-2 text-sm"><Shortcut keys="← / →" label="Previous / next ayah"/><Shortcut keys="Space" label="Play or pause current ayah"/><Shortcut keys="?" label="Open this shortcut guide"/><Shortcut keys="Esc" label="Close menus and dialogs"/></div>
+        <p className="mt-5 text-xs leading-5 text-slate-400">Shortcuts are disabled while typing in a field, so search and forms remain uninterrupted.</p>
+      </section>
+    </div>}
   </>
+}
+
+function Shortcut({ keys, label }) {
+  return <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2.5"><span className="font-medium text-slate-600">{label}</span><kbd className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 shadow-sm">{keys}</kbd></div>
 }
