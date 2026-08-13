@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Keyboard, Menu, Search, Settings2, Target, X } from 'lucide-react'
-
+import { BarChart3, BookOpen, Bookmark, Brain, CheckCircle2, CircleAlert, Grid3X3, Keyboard, Menu, Search, Settings2, Target, X } from 'lucide-react'
 const sections = [
   { title: 'Learn', items: [
+    { label: 'Mushaf', href: '/mushaf', icon: Grid3X3, description: 'Read by Madinah Mushaf page' },
     { label: 'Quran Reader', href: '/', icon: BookOpen, description: 'Browse Surahs and read ayahs' },
     { label: 'Search Quran', href: '/search', icon: Search, description: 'Find a surah or ayah' },
     { label: 'Bookmarks', href: '/bookmarks', icon: Bookmark, description: 'Saved ayahs for quick return' },
@@ -17,10 +17,8 @@ const sections = [
     { label: 'Progress', href: '/progress', icon: BarChart3, description: 'Goals, streaks and activity' },
   ] },
 ]
-
 function readLastRead() { try { const raw = JSON.parse(localStorage.getItem('tarteel:surah-detail:v3') || '{}'); const number = Number(raw?.lastRead?.surahNumber ?? raw?.currentSurah ?? raw?.surahNumber); const ayah = Number(raw?.lastRead?.ayahNumber ?? raw?.currentAyah ?? raw?.ayahNumber ?? 1); if (!Number.isInteger(number) || number < 1 || number > 114) return null; return { surahNumber: number, ayahNumber: Number.isInteger(ayah) && ayah > 0 ? ayah : 1 } } catch { return null } }
 function NavItem({ item, active, onNavigate }) { const Icon = item.icon; return <a href={item.href} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`group flex items-center gap-3 rounded-2xl px-3 py-3 transition ${active ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${active ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-white'}`}><Icon size={19} aria-hidden="true" /></span><span className="min-w-0"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-xs text-slate-400">{item.description}</span></span></a> }
-
 export default function ReaderNavigation() {
   const [open, setOpen] = useState(false); const [shortcutsOpen, setShortcutsOpen] = useState(false); const [lastRead, setLastRead] = useState(readLastRead); const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine); const pathname = window.location.pathname; const close = () => setOpen(false); const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
   useEffect(() => { const onKeyDown = event => { const target = event.target; if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return; if (event.key === 'Escape') { close(); setShortcutsOpen(false) }; if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); setShortcutsOpen(true) } }; const onReaderState = () => setLastRead(readLastRead); const onOnline = () => setOnline(true); const onOffline = () => setOnline(false); window.addEventListener('keydown', onKeyDown); window.addEventListener('storage', onReaderState); window.addEventListener('tarteel:reader-position', onReaderState); window.addEventListener('online', onOnline); window.addEventListener('offline', onOffline); return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onReaderState); window.removeEventListener('tarteel:reader-position', onReaderState); window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) } }, [])
