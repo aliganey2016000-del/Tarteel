@@ -1,6 +1,7 @@
 import AppReader from './AppReader.jsx'
 import ReaderNavigation from './ReaderNavigation.jsx'
 import NetworkStatus from './NetworkStatus.jsx'
+import InstallPrompt from './InstallPrompt.jsx'
 
 const layoutStyles = `
   .tarteel-reader-shell > div > header,
@@ -55,6 +56,7 @@ export default function AppReaderShell() {
       <ReaderNavigation />
       <AppReader />
       <NetworkStatus />
+      <InstallPrompt />
     </div>
   )
 }
