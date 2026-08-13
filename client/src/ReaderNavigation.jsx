@@ -17,6 +17,17 @@ const sections = [
   ] },
 ]
 
+const readLastRead = () => {
+  try {
+    const reader = JSON.parse(localStorage.getItem('tarteel:reader:v2') || '{}')
+    const surahNumber = Number(reader.surahNumber) || Number(localStorage.getItem('tarteel:last-surah')) || 1
+    const ayahNumber = Number(reader.ayahNumber) || 1
+    return { surahNumber, ayahNumber }
+  } catch {
+    return { surahNumber: 1, ayahNumber: 1 }
+  }
+}
+
 function NavItem({ item, active, onNavigate }) {
   const Icon = item.icon
   return <a href={item.href} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 transition duration-200 ${active ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100' : 'text-slate-600 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900'}`}>
@@ -28,17 +39,18 @@ function NavItem({ item, active, onNavigate }) {
 
 export default function ReaderNavigation() {
   const [open, setOpen] = useState(false)
-  const [lastRead, setLastRead] = useState(() => Number(localStorage.getItem('tarteel:last-surah') || 1))
+  const [lastRead, setLastRead] = useState(readLastRead)
   const pathname = window.location.pathname
   const close = () => setOpen(false)
   const isActive = item => item.href === '/' ? pathname === '/' || /^\/surah\/\d+\/?$/.test(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   useEffect(() => {
     const onKeyDown = event => { if (event.key === 'Escape') close() }
-    const onStorage = () => setLastRead(Number(localStorage.getItem('tarteel:last-surah') || 1))
+    const onStorage = () => setLastRead(readLastRead())
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('storage', onStorage)
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onStorage) }
+    window.addEventListener('tarteel:reader-position', onStorage)
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('storage', onStorage); window.removeEventListener('tarteel:reader-position', onStorage) }
   }, [])
   useEffect(() => { document.body.classList.toggle('overflow-hidden', open); return () => document.body.classList.remove('overflow-hidden') }, [open])
 
@@ -53,9 +65,9 @@ export default function ReaderNavigation() {
       </div>
 
       <div className="px-3 pt-3">
-        <a href={`/surah/${lastRead}`} onClick={close} className="group flex items-center gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white px-3 py-3.5 text-emerald-900 shadow-sm hover:-translate-y-0.5 hover:shadow-md">
+        <a href={`/surah/${lastRead.surahNumber}#ayah-${lastRead.ayahNumber}`} onClick={close} className="group flex items-center gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white px-3 py-3.5 text-emerald-900 shadow-sm hover:-translate-y-0.5 hover:shadow-md">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100"><Sparkles size={17}/></span>
-          <span className="min-w-0 flex-1"><span className="block text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-700">Quick start</span><span className="mt-0.5 block truncate text-sm font-bold">Continue Surah {lastRead}</span></span>
+          <span className="min-w-0 flex-1"><span className="block text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-700">Quick start</span><span className="mt-0.5 block truncate text-sm font-bold">Continue Surah {lastRead.surahNumber} · Ayah {lastRead.ayahNumber}</span></span>
           <span className="text-xs font-bold text-emerald-600 transition group-hover:translate-x-0.5">Open</span>
         </a>
       </div>
