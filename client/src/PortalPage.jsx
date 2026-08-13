@@ -1,0 +1,12 @@
+import { BookOpen, LogOut, Target, BarChart3 } from 'lucide-react'
+import { clearToken, getToken } from './authApi.js'
+
+const labels = { student: 'Arday', teacher: 'Macalin', parent: 'Waalid' }
+
+export default function PortalPage() {
+  const role = new URLSearchParams(window.location.search).get('role') || localStorage.getItem('tarteel:portal-role') || 'student'
+  const label = labels[role] || labels.student
+  if (!getToken()) { window.location.assign(`/login?role=${encodeURIComponent(role)}`); return null }
+  const logout = () => { clearToken(); localStorage.removeItem('tarteel:portal-user'); window.location.assign('/') }
+  return <div className="min-h-screen bg-[#f6faf8] text-slate-900"><header className="border-b border-slate-200 bg-white"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4"><a href="/" className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-700 text-white"><BookOpen size={20}/></span><b>Tarteel</b></a><button onClick={logout} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">Ka bax</button></div></header><main className="mx-auto max-w-6xl px-4 py-10"><section className="rounded-[2rem] bg-gradient-to-br from-[#075b49] to-[#0b906e] p-8 text-white"><p className="text-sm font-bold text-emerald-100">{label} portal</p><h1 className="mt-3 text-4xl font-black">Ku soo dhawoow Tarteel.</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50">Meeshaada gaarka ah ee Quran-ka. Akhri, xifdi, oo la soco horumarkaaga.</p></section><div className="mt-6 grid gap-4 sm:grid-cols-3"><a href="/mushaf" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><BookOpen className="text-emerald-700"/><h2 className="mt-4 text-lg font-extrabold">Mushaf</h2><p className="mt-1 text-sm text-slate-500">Akhri Quran-ka.</p></a><a href="/memorize" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><Target className="text-emerald-700"/><h2 className="mt-4 text-lg font-extrabold">Xifdin</h2><p className="mt-1 text-sm text-slate-500">Ku celceli oo xifdi.</p></a><a href="/progress" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><BarChart3 className="text-emerald-700"/><h2 className="mt-4 text-lg font-extrabold">Horumar</h2><p className="mt-1 text-sm text-slate-500">Eeg joogteyntaada.</p></a></div></main></div>
+}
