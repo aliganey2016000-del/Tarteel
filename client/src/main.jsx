@@ -14,6 +14,7 @@ import SurahDetail from './SurahDetail.jsx'
 import MushafReader from './MushafReader.jsx'
 import ReaderNavigation from './ReaderNavigation.jsx'
 import PersonalPlan from './PersonalPlan.jsx'
+import LandingPage from './LandingPage.jsx'
 import { BookmarksPage, DailyReviewPage, ReaderSettingsPage, WeakAyahsPage } from './ReaderLibrary.jsx'
 import { getStreaks } from './accountApi'
 import { streakLabel, summarizeStreak } from './progressUtils.js'
@@ -36,7 +37,8 @@ function Root() {
   if (pathname === '/weak-ayahs' || pathname.startsWith('/weak-ayahs/')) return <UtilityPage><WeakAyahsPage /></UtilityPage>
   if (pathname === '/settings' || pathname.startsWith('/settings/')) return <UtilityPage><ReaderSettingsPage /></UtilityPage>
   if (/^\/surah\/\d+\/?$/.test(pathname)) return <SurahDetail />
-  if (pathname === '/' || pathname === '') return <><SurahIndex /><ProgressBadge /></>
+  if (pathname === '/' || pathname === '') return <LandingPage />
+  if (pathname === '/surahs' || pathname.startsWith('/surahs/')) return <><SurahIndex /><ProgressBadge /></>
   return <><AppReaderShell /><ProgressBadge /></>
 }
 registerOfflineShell()
