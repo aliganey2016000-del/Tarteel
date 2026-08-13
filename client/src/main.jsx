@@ -15,6 +15,8 @@ import MushafReader from './MushafReader.jsx'
 import ReaderNavigation from './ReaderNavigation.jsx'
 import PersonalPlan from './PersonalPlan.jsx'
 import LandingPage from './LandingPage.jsx'
+import LoginPage from './LoginPage.jsx'
+import PortalPage from './PortalPage.jsx'
 import { BookmarksPage, DailyReviewPage, ReaderSettingsPage, WeakAyahsPage } from './ReaderLibrary.jsx'
 import { getStreaks } from './accountApi'
 import { streakLabel, summarizeStreak } from './progressUtils.js'
@@ -27,6 +29,8 @@ function Root() {
   const pathname = window.location.pathname
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
   if (isAdminRoute) return <AdminDashboard />
+  if (pathname === '/login' || pathname.startsWith('/login/')) return <LoginPage />
+  if (pathname === '/portal' || pathname.startsWith('/portal/')) return <PortalPage />
   if (pathname === '/mushaf' || pathname.startsWith('/mushaf/')) return <MushafReader />
   if (pathname === '/search' || pathname.startsWith('/search/')) return <QuranSearch />
   if (pathname === '/progress' || pathname.startsWith('/progress/')) return <ProgressDashboard />
